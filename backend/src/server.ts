@@ -9,9 +9,9 @@ async function main() {
   await prisma.$connect();
   console.log('✅ 数据库连接成功');
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 OPC服务平台后端启动成功`);
-    console.log(`   运行地址: http://localhost:${PORT}`);
+    console.log(`   运行地址: http://0.0.0.0:${PORT}`);
     console.log(`   环境: ${process.env.NODE_ENV || 'development'}`);
   });
 }
