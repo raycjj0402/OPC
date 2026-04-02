@@ -17,12 +17,12 @@ COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npm run build
 
-# ===== Stage 3: Production =====
-FROM node:20-alpine
+# ===== Stage 3: Production (Debian Slim - proper OpenSSL support) =====
+FROM node:20-slim
 WORKDIR /app
 
-# Fix OpenSSL for Prisma on Alpine
-RUN apk add --no-cache openssl openssl-dev
+# Install OpenSSL for Prisma
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Copy backend build
 COPY --from=backend-builder /app/node_modules ./node_modules
@@ -30,12 +30,16 @@ COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/prisma ./prisma
 COPY backend/package*.json ./
 
+# Regenerate Prisma client for this OS
+RUN npx prisma generate
+
 # Copy frontend build into backend's public folder
 COPY --from=frontend-builder /frontend/dist ./public
 
-EXPOSE 4000
-
+# Copy startup script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+
+EXPOSE 8080
 
 CMD ["/start.sh"]
