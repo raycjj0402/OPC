@@ -8,7 +8,16 @@
       "Bash(python3 -c \":*)",
       "Bash(chmod +x /Users/jianjunchen/Desktop/Confidential/OPC/start.sh)",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(ssh-keygen -t ed25519 -C \"raycjj0402@github\" -f ~/.ssh/id_ed25519_github -N \"\")",
+      "Bash(git add:*)",
+      "Bash(npm list:*)",
+      "Bash(railway --version)",
+      "Bash(railway login:*)"
     ]
   }
 }
