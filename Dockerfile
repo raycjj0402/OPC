@@ -21,6 +21,9 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
+# Fix OpenSSL for Prisma on Alpine
+RUN apk add --no-cache openssl openssl-dev
+
 # Copy backend build
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/dist ./dist
@@ -32,4 +35,4 @@ COPY --from=frontend-builder /frontend/dist ./public
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma generate && npx prisma db push --accept-data-loss && node dist/server.js"]
+CMD ["sh", "-c", "echo '--- Environment Check ---' && echo \"DATABASE_URL is ${DATABASE_URL:+SET}${DATABASE_URL:-NOT SET}\" && if [ -z \"$DATABASE_URL\" ]; then echo 'ERROR: DATABASE_URL is not set. Please configure it in Railway Variables.' && exit 1; fi && echo 'Running prisma db push...' && npx prisma db push --accept-data-loss && echo 'Starting server...' && node dist/server.js"]
