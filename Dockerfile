@@ -40,7 +40,6 @@ COPY --from=frontend-builder /frontend/dist ./public
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
-ENV PORT=8080
-EXPOSE 8080
+EXPOSE 4000
 
 CMD ["/start.sh"]
