@@ -1,0 +1,493 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== 用户相关 ====================
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  name            String?
+  avatarUrl       String?
+  role            UserRole  @default(USER)
+  status          UserStatus @default(ACTIVE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
+  // 订阅信息
+  subscription    Subscription?
+
+  // 引导信息
+  onboarding      Onboarding?
+
+  // 学习记录
+  lessonProgress  LessonProgress[]
+  learningPath    LearningPath?
+
+  // 预约记录
+  bookings        Booking[]
+
+  // 收藏
+  savedPolicies   SavedPolicy[]
+
+  // 社区
+  posts           Post[]
+  comments        Comment[]
+  postLikes       PostLike[]
+
+  // 电子发票申请
+  invoiceRequests InvoiceRequest[]
+
+  // 邮件验证
+  emailVerifications EmailVerification[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  OPERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  REFUNDED
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("email_verifications")
+}
+
+// ==================== 订阅与支付 ====================
+
+model Subscription {
+  id          String           @id @default(uuid())
+  userId      String           @unique
+  user        User             @relation(fields: [userId], references: [id])
+  plan        SubscriptionPlan @default(FREE)
+  paidAt      DateTime?
+  expiresAt   DateTime?
+  consultationsLeft Int        @default(0)
+  consultationsUsed Int        @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  orders      Order[]
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC     // ¥199
+  ADVANCED  // ¥999
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  orderNo        String      @unique
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  amount         Int         // 分 (CNY cents)
+  plan           SubscriptionPlan
+  orderType      OrderType   @default(NEW)
+  paymentMethod  PaymentMethod?
+  paymentId      String?     // 第三方支付交易号
+  status         OrderStatus @default(PENDING)
+  refundReason   String?
+  refundedAt     DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  invoiceRequest InvoiceRequest?
+
+  @@map("orders")
+}
+
+enum OrderType {
+  NEW
+  UPGRADE   // 补差价升级
+}
+
+enum PaymentMethod {
+  WECHAT
+  ALIPAY
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDING
+  REFUNDED
+  CANCELLED
+}
+
+model InvoiceRequest {
+  id          String   @id @default(uuid())
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String   // 发票抬头
+  taxNo       String?  // 税号
+  email       String   // 接收邮箱
+  status      InvoiceStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("invoice_requests")
+}
+
+enum InvoiceStatus {
+  PENDING
+  ISSUED
+  FAILED
+}
+
+// ==================== 个性化引导 ====================
+
+model Onboarding {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  city         String
+  industries   String[] // 最多2个
+  resourcePrefs String[] // 资源偏好
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("onboardings")
+}
+
+// ==================== 学习模块 ====================
+
+model LearningPath {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  modules     LearningPathModule[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("learning_paths")
+}
+
+model LearningPathModule {
+  id             String       @id @default(uuid())
+  learningPathId String
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id])
+  moduleId       String
+  module         Module       @relation(fields: [moduleId], references: [id])
+  order          Int
+  createdAt      DateTime     @default(now())
+
+  @@map("learning_path_modules")
+}
+
+model Module {
+  id          String    @id @default(uuid())
+  slug        String    @unique
+  title       String
+  description String
+  icon        String?
+  tags        String[]  // 城市标签 + 行业标签 + 资源类型标签
+  order       Int       @default(0)
+  isPublished Boolean   @default(true)
+  chapters    Chapter[]
+  learningPathModules LearningPathModule[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("modules")
+}
+
+model Chapter {
+  id          String   @id @default(uuid())
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id])
+  title       String
+  description String?
+  order       Int      @default(0)
+  lessons     Lesson[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("chapters")
+}
+
+model Lesson {
+  id          String      @id @default(uuid())
+  chapterId   String
+  chapter     Chapter     @relation(fields: [chapterId], references: [id])
+  title       String
+  contentType LessonType  @default(ARTICLE)
+  content     String?     // 富文本内容
+  videoUrl    String?
+  pdfUrl      String?
+  duration    Int?        // 预计完成时间（分钟）
+  order       Int         @default(0)
+  isPublished Boolean     @default(true)
+  progress    LessonProgress[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("lessons")
+}
+
+enum LessonType {
+  ARTICLE
+  VIDEO
+  PDF
+  TOOL_CARD
+  CASE_STUDY
+}
+
+model LessonProgress {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  lessonId     String
+  lesson       Lesson   @relation(fields: [lessonId], references: [id])
+  progress     Float    @default(0) // 0-100 百分比
+  completed    Boolean  @default(false)
+  completedAt  DateTime?
+  timeSpent    Int      @default(0) // 秒
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+// ==================== 政府资源 ====================
+
+model Policy {
+  id          String   @id @default(uuid())
+  title       String
+  city        String
+  category    PolicyCategory
+  summary     String
+  content     String   // 全文 (富文本 or PDF链接)
+  pdfUrl      String?
+  tags        String[]
+  publishedAt DateTime?
+  isActive    Boolean  @default(true)
+  viewCount   Int      @default(0)
+  savedBy     SavedPolicy[]
+  qaHistory   PolicyQA[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("policies")
+}
+
+enum PolicyCategory {
+  COMPUTE_SUBSIDY    // 算力/工具补贴
+  SPACE_SUPPORT      // 空间支持
+  STARTUP_FUND       // 资金启动
+  TAX_INCENTIVE      // 税收优惠
+  SERVICE_ECOSYSTEM  // 服务生态
+}
+
+model SavedPolicy {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  policyId  String
+  policy    Policy   @relation(fields: [policyId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, policyId])
+  @@map("saved_policies")
+}
+
+model PolicyQA {
+  id        String   @id @default(uuid())
+  userId    String
+  policyId  String?
+  policy    Policy?  @relation(fields: [policyId], references: [id])
+  question  String
+  answer    String
+  sources   Json?    // 引用来源
+  createdAt DateTime @default(now())
+
+  @@map("policy_qa")
+}
+
+// ==================== 专家预约 ====================
+
+model Expert {
+  id          String   @id @default(uuid())
+  name        String
+  avatar      String?
+  title       String
+  bio         String
+  industries  String[]
+  rating      Float    @default(5.0)
+  totalBookings Int    @default(0)
+  isActive    Boolean  @default(true)
+  slots       ExpertSlot[]
+  bookings    Booking[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("experts")
+}
+
+model ExpertSlot {
+  id        String    @id @default(uuid())
+  expertId  String
+  expert    Expert    @relation(fields: [expertId], references: [id])
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean   @default(false)
+  booking   Booking?
+  createdAt DateTime  @default(now())
+
+  @@map("expert_slots")
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  expertId      String
+  expert        Expert        @relation(fields: [expertId], references: [id])
+  slotId        String        @unique
+  slot          ExpertSlot    @relation(fields: [slotId], references: [id])
+  name          String
+  wechat        String
+  phone         String
+  city          String
+  industry      String
+  description   String
+  status        BookingStatus @default(PENDING)
+  cancelReason  String?
+  rating        Int?
+  summaryDoc    String?       // 会后总结文档URL
+  emailLogs     EmailLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW  // 用户爽约
+}
+
+model EmailLog {
+  id          String      @id @default(uuid())
+  bookingId   String?
+  booking     Booking?    @relation(fields: [bookingId], references: [id])
+  recipient   String
+  subject     String
+  trigger     String      // 触发事件
+  status      EmailStatus @default(PENDING)
+  errorMsg    String?
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@map("email_logs")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ==================== 社区 ====================
+
+model Post {
+  id          String     @id @default(uuid())
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id])
+  title       String
+  content     String
+  industry    String?
+  tags        String[]
+  isPinned    Boolean    @default(false)
+  isFeatured  Boolean    @default(false) // 精华帖
+  status      PostStatus @default(PUBLISHED)
+  viewCount   Int        @default(0)
+  comments    Comment[]
+  likes       PostLike[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("posts")
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+  DELETED
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  parentId  String?
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  status    PostStatus @default(PUBLISHED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("comments")
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+// ==================== 徽章 ====================
+
+model Badge {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  icon        String
+  createdAt   DateTime @default(now())
+
+  @@map("badges")
+}

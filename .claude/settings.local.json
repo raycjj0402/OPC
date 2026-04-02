@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/jianjunchen/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/94acd081-7ed6-4405-9f97-f2d49b8f897a/a38776ce-0ed6-4d09-9b98-fcbae1304e68/skills/docx/**)",
+      "Bash(pandoc --track-changes=all \"/Users/jianjunchen/Downloads/OPC服务平台_PRD_v1.1.docx\" -o /tmp/opc_prd.md)",
+      "Read(//tmp/**)",
+      "Bash(python scripts/office/unpack.py \"/Users/jianjunchen/Downloads/OPC服务平台_PRD_v1.1.docx\" /tmp/opc_unpacked/)",
+      "Bash(python3 -c \":*)",
+      "Bash(chmod +x /Users/jianjunchen/Desktop/Confidential/OPC/start.sh)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPC · 一人公司，从零到亿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C97A;
+    --gold-dim: rgba(201,168,76,0.15);
+    --bg: #0A0B0F;
+    --bg2: #0F1118;
+    --bg3: #141720;
+    --text: #F0EDE6;
+    --text-muted: #8A8680;
+    --accent: #4ECDC4;
+    --red: #E85D5D;
+    --border: rgba(201,168,76,0.2);
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans SC', sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    cursor: default;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  section { position: relative; z-index: 1; }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 20px 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(10,11,15,0.95), transparent);
+    backdrop-filter: blur(8px);
+  }
+  .nav-logo {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 22px; font-weight: 900;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+  }
+  .nav-logo span { color: var(--text); }
+  .nav-links { display: flex; gap: 36px; align-items: center; }
+  .nav-links a {
+    color: var(--text-muted); text-decoration: none;
+    font-size: 13px; letter-spacing: 0.08em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--gold); }
+  .nav-cta {
+    background: var(--gold); color: #000 !important;
+    padding: 9px 22px; border-radius: 2px;
+    font-weight: 500 !important;
+    transition: background 0.2s !important;
+  }
+  .nav-cta:hover { background: var(--gold-light) !important; color: #000 !important; }
+
+  /* ── HERO ── */
+  #hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 120px 60px 80px;
+    position: relative; overflow: hidden;
+  }
+  .hero-bg-lines {
+    position: absolute; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 80px 80px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+  }
+  .hero-glow {
+    position: absolute; top: -200px; left: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(201,168,76,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-glow-right {
+    position: absolute; bottom: -100px; right: -100px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(78,205,196,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-content { position: relative; z-index: 2; max-width: 900px; }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 100px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--gold);
+    letter-spacing: 0.12em;
+    margin-bottom: 40px;
+    animation: fadeUp 0.8s ease both;
+  }
+  .hero-tag::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gold);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .hero-h1 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(52px, 7vw, 96px);
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    animation: fadeUp 0.8s 0.1s ease both;
+  }
+  .hero-h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    margin-top: 28px;
+    font-size: 18px; line-height: 1.8;
+    color: var(--text-muted);
+    max-width: 560px;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  .hero-actions {
+    margin-top: 48px;
+    display: flex; gap: 16px; align-items: center;
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+  .btn-primary {
+    background: var(--gold);
+    color: #000; padding: 15px 36px;
+    font-size: 15px; font-weight: 500;
+    border: none; border-radius: 2px; cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover { background: var(--gold-light); transform: translateY(-1px); }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    padding: 15px 36px; font-size: 15px;
+    border: 1px solid rgba(240,237,230,0.2);
+    border-radius: 2px; cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+  .hero-stats {
+    margin-top: 80px;
+    display: flex; gap: 60px;
+    animation: fadeUp 0.8s 0.4s ease both;
+  }
+  .stat-item { display: flex; flex-direction: column; gap: 4px; }
+  .stat-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 32px; font-weight: 700; color: var(--gold);
+  }
+  .stat-label { font-size: 12px; color: var(--text-muted); letter-spacing: 0.06em; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── TICKER ── */
+  .ticker-wrap {
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 12px 0;
+  }
+  .ticker {
+    display: flex; gap: 0;
+    animation: ticker 30s linear infinite;
+    white-space: nowrap;
+  }
+  .ticker-item {
+    display: inline-flex; align-items: center; gap: 24px;
+    padding: 0 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+  .ticker-item span { color: var(--gold); }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* ── SECTION BASE ── */
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.2em;
+    color: var(--gold); text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .section-h2 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(32px, 4vw, 52px);
+    font-weight: 900; line-height: 1.15;
+  }
+  .section-desc {
+    font-size: 16px; line-height: 1.9;
+    color: var(--text-muted); margin-top: 16px;
+    max-width: 560px;
+  }
+
+  /* ── FOR WHO ── */
+  #forwho {
+    padding: 120px 60px;
+    background: var(--bg2);
+  }
+  .forwho-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 2px; margin-top: 60px;
+  }
+  .who-card {
+    background: var(--bg3);
+    padding: 44px 40px;
+    position: relative; overflow: hidden;
+    transition: background 0.3s;
+  }
+  .who-card:hover { background: #1a1e2a; }
+  .who-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(to right, var(--gold), transparent);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .who-card:hover::before { opacity: 1; }
+  .who-icon {
+    font-size: 36px; margin-bottom: 20px;
+    display: block;
+  }
+  .who-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 22px; font-weight: 700;
+    margin-bottom: 12px; color: var(--text);
+  }
+  .who-desc {
+    font-size: 14px; line-height: 1.9; color: var(--text-muted);
+  }
+  .who-tags {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px;
+  }
+  .who-tag {
+    font-size: 11px; padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 100px; color: var(--gold);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* ── MANIFESTO ── */
+  #manifesto {
+    padding: 140px 60px;
+    position: relative; overflow: hidden;
+  }
+  .manifesto-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 60% at 80% 50%, rgba(201,168,76,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 20% 50%, rgba(78,205,196,0.04) 0%, transparent 60%);
+  }
+  .manifesto-inner {
+    position: relative; z-index: 2;
+    max-width: 780px; margin: 0 auto; text-align: center;
+  }
+  .manifesto-quote {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(28px, 3.5vw, 48px);
+    font-weight: 700; line-height: 1.6;
+    color: var(--text);
+  }
+  .manifesto-quote em {
+    font-style: normal; color: var(--gold);
+    border-bottom: 1px solid var(--gold);
+  }
+  .manifesto-author {
+    margin-top: 32px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px; color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── ADVANTAGES ── */
+  #advantages {
+    padding: 120px 60px;
+    background: var(--bg2);
+  }
+  .adv-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+  .adv-left { position: sticky; top: 100px; }
+  .adv-list { margin-top: 60px; display: flex; flex-direction: column; gap: 2px; }
+  .adv-item {
+    padding: 28px 32px;
+    background: var(--bg3);
+    display: flex; gap: 20px; align-items: flex-start;
+    transition: all 0.3s;
+    border-left: 2px solid transparent;
+  }
+  .adv-item:hover { border-left-color: var(--gold); background: #141720; }
+  .adv-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--gold);
+    min-width: 28px; padding-top: 4px;
+  }
+  .adv-content h3 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px; font-weight: 700; margin-bottom: 8px;
+  }
+  .adv-content p { font-size: 13px; line-height: 1.8; color: var(--text-muted); }
+
+  /* ── SERVICES ── */
+  #services { padding: 120px 60px; }
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px; margin-top: 60px;
+  }
+  .svc-card {
+    background: var(--bg2);
+    padding: 40px 36px;
+    position: relative; overflow: hidden;
+    transition: all 0.3s;
+  }
+  .svc-card:hover { background: var(--bg3); transform: translateY(-4px); }
+  .svc-card-wide { grid-column: span 2; }
+  .svc-icon {
+    width: 48px; height: 48px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin-bottom: 24px;
+    background: var(--gold-dim);
+    border: 1px solid var(--border);
+  }
+  .svc-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 20px; font-weight: 700; margin-bottom: 12px;
+  }
+  .svc-desc { font-size: 13px; line-height: 1.9; color: var(--text-muted); margin-bottom: 24px; }
+  .svc-items { display: flex; flex-wrap: wrap; gap: 8px; }
+  .svc-item {
+    font-size: 11px; padding: 5px 14px;
+    background: rgba(201,168,76,0.08);
+    border: 1px solid var(--border); border-radius: 2px;
+    color: var(--gold-light);
+    font-family: 'Space Mono', monospace;
+  }
+  .svc-card-accent { border-top: 2px solid var(--gold); }
+  .svc-card-teal { border-top: 2px solid var(--accent); }
+  .svc-card-teal .svc-icon { background: rgba(78,205,196,0.1); border-color: rgba(78,205,196,0.2); }
+  .svc-card-teal .svc-item { background: rgba(78,205,196,0.08); border-color: rgba(78,205,196,0.2); color: var(--accent); }
+
+  /* ── CITY RESOURCES ── */
+  #cities {
+    padding: 120px 60px;
+    background: var(--bg2);
+  }
+  .cities-tabs { display: flex; gap: 2px; margin-top: 48px; margin-bottom: 2px; }
+  .tab {
+    padding: 12px 28px; font-size: 13px;
+    background: var(--bg3); color: var(--text-muted);
+    cursor: pointer; border: none;
+    letter-spacing: 0.05em; transition: all 0.2s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--gold); color: #000; font-weight: 500; }
+  .cities-content { display: none; }
+  .cities-content.active { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+  .city-group {
+    background: var(--bg3);
+    padding: 36px 32px;
+  }
+  .city-group-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px; font-weight: 700; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .city-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; padding: 3px 10px;
+    background: var(--gold-dim); color: var(--gold);
+    border: 1px solid var(--border); border-radius: 2px;
+    letter-spacing: 0.1em;
+  }
+  .city-perks { display: flex; flex-direction: column; gap: 12px; }
+  .city-perk {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .city-perk::before {
+    content: '▸'; color: var(--gold); font-size: 10px; flex-shrink: 0;
+  }
+
+  /* ── PROCESS ── */
+  #process { padding: 120px 60px; }
+  .process-steps {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 0; margin-top: 60px;
+    position: relative;
+  }
+  .process-steps::after {
+    content: '';
+    position: absolute; top: 28px; left: 10%; right: 10%;
+    height: 1px; background: var(--border);
+    z-index: 0;
+  }
+  .step {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 0 16px;
+    position: relative; z-index: 1;
+  }
+  .step-num {
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px; color: var(--gold);
+    margin-bottom: 20px;
+    transition: all 0.3s;
+  }
+  .step:hover .step-num {
+    background: var(--gold); color: #000; border-color: var(--gold);
+  }
+  .step-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px; font-weight: 700; margin-bottom: 8px;
+  }
+  .step-desc { font-size: 12px; color: var(--text-muted); line-height: 1.7; }
+
+  /* ── SOCIAL PROOF ── */
+  #proof {
+    padding: 120px 60px;
+    background: var(--bg2);
+  }
+  .proof-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 2px; margin-top: 60px;
+  }
+  .proof-card {
+    background: var(--bg3); padding: 36px 32px;
+    position: relative;
+  }
+  .proof-quote {
+    font-size: 14px; line-height: 1.9; color: var(--text-muted);
+    margin-bottom: 24px; font-style: italic;
+  }
+  .proof-quote::before { content: '"'; color: var(--gold); font-size: 28px; line-height: 0; vertical-align: -12px; margin-right: 4px; }
+  .proof-person { display: flex; gap: 12px; align-items: center; }
+  .proof-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold-dim), var(--bg));
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Noto Serif SC', serif; font-size: 16px; color: var(--gold);
+  }
+  .proof-name { font-size: 13px; font-weight: 500; }
+  .proof-role { font-size: 11px; color: var(--text-muted); }
+  .proof-result {
+    position: absolute; top: 24px; right: 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--accent);
+    border: 1px solid rgba(78,205,196,0.2);
+    padding: 4px 10px; border-radius: 2px;
+  }
+
+  /* ── CTA ── */
+  #cta {
+    padding: 160px 60px;
+    text-align: center; position: relative; overflow: hidden;
+  }
+  #cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 70% 70% at 50% 50%, rgba(201,168,76,0.08) 0%, transparent 60%);
+  }
+  .cta-h2 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(40px, 5vw, 72px);
+    font-weight: 900; line-height: 1.1;
+    position: relative; z-index: 1;
+  }
+  .cta-h2 em { font-style: normal; color: var(--gold); }
+  .cta-sub {
+    font-size: 17px; color: var(--text-muted);
+    margin-top: 20px; line-height: 1.8;
+    position: relative; z-index: 1;
+  }
+  .cta-actions {
+    margin-top: 48px;
+    display: flex; gap: 16px; justify-content: center;
+    position: relative; z-index: 1;
+  }
+  .cta-note {
+    margin-top: 20px;
+    font-size: 12px; color: var(--text-muted);
+    position: relative; z-index: 1;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 48px 60px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--bg2);
+  }
+  .footer-brand {
+    font-family: 'Noto Serif SC', serif;
+    font-weight: 900; font-size: 18px; color: var(--gold);
+  }
+  .footer-copy { font-size: 12px; color: var(--text-muted); }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a {
+    font-size: 12px; color: var(--text-muted);
+    text-decoration: none; transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--gold); }
+
+  /* ── SCROLL REVEAL ── */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    nav { padding: 16px 24px; }
+    .nav-links { display: none; }
+    #hero, #forwho, #advantages, #services, #cities, #process, #proof, #cta { padding-left: 24px; padding-right: 24px; }
+    .forwho-grid, .adv-layout, .services-grid, .cities-content.active, .proof-grid { grid-template-columns: 1fr; }
+    .svc-card-wide { grid-column: span 1; }
+    .process-steps { grid-template-columns: 1fr 1fr; gap: 24px; }
+    .process-steps::after { display: none; }
+    .hero-stats { flex-wrap: wrap; gap: 32px; }
+    footer { flex-direction: column; gap: 20px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">OPC<span> · 一人公司</span></div>
+  <div class="nav-links">
+    <a href="#forwho">适合谁</a>
+    <a href="#advantages">为什么</a>
+    <a href="#services">服务</a>
+    <a href="#cities">城市政策</a>
+    <a href="#cta" class="nav-cta">免费咨询</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg-lines"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-glow-right"></div>
+  <div class="hero-content">
+    <div class="hero-tag">ONE PERSON COMPANY · 新时代的商业革命</div>
+    <h1 class="hero-h1">
+      一个人，<br>
+      也能建立<br>
+      <em>亿级商业版图</em>
+    </h1>
+    <p class="hero-sub">
+      AI 时代重新定义了创业的边界。<br>
+      从选行业、拿政府资源、搭 AI 工具，到获客变现——<br>
+      我们把每一步都变成你的竞争优势。
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary">立即开始 →</button>
+      <button class="btn-ghost">查看成功案例</button>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-item">
+        <span class="stat-num">3200+</span>
+        <span class="stat-label">已服务 OPC 创始人</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num">¥850万</span>
+        <span class="stat-label">政府补贴累计申请</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num">6城市</span>
+        <span class="stat-label">政策资源覆盖</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+    <span class="ticker-item">北京算力补贴 <span>最高 ¥50万</span></span>
+    <span class="ticker-item">上海空间支持 <span>免租 12 个月</span></span>
+    <span class="ticker-item">杭州税收优惠 <span>前三年减免</span></span>
+    <span class="ticker-item">深圳资金启动 <span>最高 ¥100万</span></span>
+    <span class="ticker-item">重庆服务生态 <span>全链条对接</span></span>
+    <span class="ticker-item">南京 AI 补贴 <span>工具全覆盖</span></span>
+    <span class="ticker-item">广州人才计划 <span>落户加分</span></span>
+    <!-- duplicate for seamless loop -->
+    <span class="ticker-item">北京算力补贴 <span>最高 ¥50万</span></span>
+    <span class="ticker-item">上海空间支持 <span>免租 12 个月</span></span>
+    <span class="ticker-item">杭州税收优惠 <span>前三年减免</span></span>
+    <span class="ticker-item">深圳资金启动 <span>最高 ¥100万</span></span>
+    <span class="ticker-item">重庆服务生态 <span>全链条对接</span></span>
+    <span class="ticker-item">南京 AI 补贴 <span>工具全覆盖</span></span>
+    <span class="ticker-item">广州人才计划 <span>落户加分</span></span>
+  </div>
+</div>
+
+<!-- FOR WHO -->
+<section id="forwho">
+  <div class="section-label reveal">// 适合这些人</div>
+  <h2 class="section-h2 reveal">你是下面<br>哪种人？</h2>
+  <p class="section-desc reveal">不需要团队、不需要办公室、不需要资本。<br>只需要你，和正确的系统。</p>
+  <div class="forwho-grid reveal">
+    <div class="who-card">
+      <span class="who-icon">🔥</span>
+      <div class="who-title">想辞职创业，但不知道怎么开始</div>
+      <div class="who-desc">你有想法、有执行力，但面对行业选择、注册公司、政策申请，感到无从下手。我们帮你把第一步变得清晰。</div>
+      <div class="who-tags">
+        <span class="who-tag">在职打工人</span>
+        <span class="who-tag">想要自由</span>
+        <span class="who-tag">0 经验创业</span>
+      </div>
+    </div>
+    <div class="who-card">
+      <span class="who-icon">💻</span>
+      <div class="who-title">独立开发者 / 设计师，想商业化变现</div>
+      <div class="who-desc">你有技术或创意，但缺乏获客渠道和商业结构。我们帮你把技能变成可持续的收入体系。</div>
+      <div class="who-tags">
+        <span class="who-tag">开发者</span>
+        <span class="who-tag">设计师</span>
+        <span class="who-tag">内容创作者</span>
+      </div>
+    </div>
+    <div class="who-card">
+      <span class="who-icon">📚</span>
+      <div class="who-title">有专业知识，想做知识付费或教育</div>
+      <div class="who-desc">你在某个领域有深度积累，但不知道如何打包成产品、定价和销售。我们给你完整的商业化路径。</div>
+      <div class="who-tags">
+        <span class="who-tag">专家顾问</span>
+        <span class="who-tag">知识博主</span>
+        <span class="who-tag">培训讲师</span>
+      </div>
+    </div>
+    <div class="who-card">
+      <span class="who-icon">🌏</span>
+      <div class="who-title">想拿政府资源和补贴，不知道入口</div>
+      <div class="who-desc">一线与新一线城市有大量针对 AI 创业者的补贴政策，但信息分散。我们帮你精准匹配并完成申请。</div>
+      <div class="who-tags">
+        <span class="who-tag">回国创业者</span>
+        <span class="who-tag">应届生</span>
+        <span class="who-tag">AI 创业者</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MANIFESTO -->
+<section id="manifesto">
+  <div class="manifesto-bg"></div>
+  <div class="manifesto-inner reveal">
+    <p class="manifesto-quote">
+      大公司需要 100 人做的事，<br>
+      AI 时代的 OPC 创始人，<br>
+      <em>一个人就能做到。</em>
+    </p>
+    <div class="manifesto-author">— OPC 宣言 · 2024</div>
+  </div>
+</section>
+
+<!-- ADVANTAGES -->
+<section id="advantages">
+  <div class="adv-layout">
+    <div class="adv-left reveal">
+      <div class="section-label">// 一人公司的优势</div>
+      <h2 class="section-h2">为什么现在是<br>最好的时机？</h2>
+      <p class="section-desc">AI 工具革命 + 政策红利 + 数字化基础设施成熟，三浪叠加，一人公司的黄金时代已经到来。</p>
+    </div>
+    <div class="adv-list reveal">
+      <div class="adv-item">
+        <span class="adv-num">01</span>
+        <div class="adv-content">
+          <h3>极低的启动成本</h3>
+          <p>AI 工具替代了过去需要团队才能完成的工作。设计、开发、运营、客服——一个人可以全部搞定。</p>
+        </div>
+      </div>
+      <div class="adv-item">
+        <span class="adv-num">02</span>
+        <div class="adv-content">
+          <h3>政府在给 AI 创业者发钱</h3>
+          <p>北上广深重庆杭州南京，都有专门针对 AI 创业者的补贴计划。多数人根本不知道这些政策的存在。</p>
+        </div>
+      </div>
+      <div class="adv-item">
+        <span class="adv-num">03</span>
+        <div class="adv-content">
+          <h3>决策速度是最大竞争力</h3>
+          <p>大公司的会议，你的执行。一人公司的决策周期是大公司的 1/10，在快速变化的市场中，速度就是护城河。</p>
+        </div>
+      </div>
+      <div class="adv-item">
+        <span class="adv-num">04</span>
+        <div class="adv-content">
+          <h3>利润留给自己</h3>
+          <p>没有员工成本、没有办公室租金、没有股权稀释。一旦盈利，几乎所有利润都是你的。</p>
+        </div>
+      </div>
+      <div class="adv-item">
+        <span class="adv-num">05</span>
+        <div class="adv-content">
+          <h3>从副业到主业，风险可控</h3>
+          <p>OPC 模式允许你在保留主业的同时，先把副业做到年入百万，再决定是否全职投入。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section id="services">
+  <div class="section-label reveal">// 我们提供什么</div>
+  <h2 class="section-h2 reveal">从零到变现的<br>完整资源体系</h2>
+  <div class="services-grid reveal">
+    <div class="svc-card svc-card-accent svc-card-wide">
+      <div class="svc-icon">🏙️</div>
+      <div class="svc-title">政府资源匹配</div>
+      <div class="svc-desc">覆盖北上广深及重庆、杭州、南京，精准匹配你所在城市的算力补贴、空间支持、启动资金和税收优惠。从政策解读到材料申请，全程代办。</div>
+      <div class="svc-items">
+        <span class="svc-item">算力/工具补贴</span>
+        <span class="svc-item">办公空间支持</span>
+        <span class="svc-item">启动资金申请</span>
+        <span class="svc-item">税收优惠方案</span>
+        <span class="svc-item">服务生态对接</span>
+      </div>
+    </div>
+    <div class="svc-card svc-card-teal">
+      <div class="svc-icon">🤖</div>
+      <div class="svc-title">AI 工具配置</div>
+      <div class="svc-desc">帮你搭建适合自身业务的 AI 工作流，从工具选型到 VPN 环境配置，让你一天内进入生产状态。</div>
+      <div class="svc-items">
+        <span class="svc-item">工作流搭建</span>
+        <span class="svc-item">Skill 定制</span>
+        <span class="svc-item">VPN 配置</span>
+        <span class="svc-item">工具选型</span>
+      </div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-icon">🏭</div>
+      <div class="svc-title">行业资源导入</div>
+      <div class="svc-desc">电商、知识付费、教育、金融——每个赛道的核心资源、供应商和渠道，直接给你。</div>
+      <div class="svc-items">
+        <span class="svc-item">电商</span>
+        <span class="svc-item">知识付费</span>
+        <span class="svc-item">教育</span>
+        <span class="svc-item">金融</span>
+      </div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-icon">⚡</div>
+      <div class="svc-title">开发 & 上线</div>
+      <div class="svc-desc">AI 原型到正式产品的全套开发支持，前端、后端、部署、上线教程，从 0 到 1 一站完成。</div>
+      <div class="svc-items">
+        <span class="svc-item">AI 原型</span>
+        <span class="svc-item">前端开发</span>
+        <span class="svc-item">后端开发</span>
+        <span class="svc-item">部署上线</span>
+      </div>
+    </div>
+    <div class="svc-card svc-card-wide">
+      <div class="svc-icon">📣</div>
+      <div class="svc-title">获客体系搭建</div>
+      <div class="svc-desc">工具 × 玩法双驱动。我们不只给你工具，更给你已验证的获客策略——从流量到转化，建立你的自动化增长飞轮。</div>
+      <div class="svc-items">
+        <span class="svc-item">获客工具配置</span>
+        <span class="svc-item">流量策略</span>
+        <span class="svc-item">转化漏斗设计</span>
+        <span class="svc-item">私域运营</span>
+        <span class="svc-item">自动化增长</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CITY RESOURCES -->
+<section id="cities">
+  <div class="section-label reveal">// 城市政策资源</div>
+  <h2 class="section-h2 reveal">选对城市，<br>政策就是你的启动资金</h2>
+  <p class="section-desc reveal">许多 OPC 创始人完全不知道，注册一家 AI 公司，可以合法获得数十万的政府扶持。</p>
+  <div class="cities-tabs reveal">
+    <button class="tab active" onclick="switchTab('tier1')">一线城市</button>
+    <button class="tab" onclick="switchTab('tier15')">新一线城市</button>
+  </div>
+  <div class="cities-content active reveal" id="tab-tier1">
+    <div class="city-group">
+      <div class="city-group-title">北京 · 上海 <span class="city-badge">TOP TIER</span></div>
+      <div class="city-perks">
+        <div class="city-perk">算力补贴：GPU 算力租用最高补贴 50%</div>
+        <div class="city-perk">空间支持：孵化器免费入驻 6-18 个月</div>
+        <div class="city-perk">资金启动：最高 ¥100 万无偿扶持资金</div>
+        <div class="city-perk">税收优惠：前三年企业所得税减半</div>
+        <div class="city-perk">服务生态：法务、财务、HR 一站式对接</div>
+      </div>
+    </div>
+    <div class="city-group">
+      <div class="city-group-title">广州 · 深圳 <span class="city-badge">TOP TIER</span></div>
+      <div class="city-perks">
+        <div class="city-perk">算力补贴：深圳算力券最高 ¥30 万/年</div>
+        <div class="city-perk">空间支持：南山/天河科技园优先入驻</div>
+        <div class="city-perk">资金启动：大湾区 AI 专项最高 ¥80 万</div>
+        <div class="city-perk">税收优惠：高新认定享受 15% 税率</div>
+        <div class="city-perk">服务生态：粤港澳大湾区资源对接</div>
+      </div>
+    </div>
+  </div>
+  <div class="cities-content" id="tab-tier15">
+    <div class="city-group">
+      <div class="city-group-title">杭州 · 南京 <span class="city-badge">RISING</span></div>
+      <div class="city-perks">
+        <div class="city-perk">算力补贴：阿里云/华为云合作优惠</div>
+        <div class="city-perk">空间支持：梦想小镇等优质园区优先</div>
+        <div class="city-perk">资金启动：浙江省数字经济专项 ¥50 万</div>
+        <div class="city-perk">税收优惠：数字经济企业 5 年税收优惠</div>
+        <div class="city-perk">服务生态：互联网资源生态最丰富</div>
+      </div>
+    </div>
+    <div class="city-group">
+      <div class="city-group-title">重庆 <span class="city-badge">RISING</span></div>
+      <div class="city-perks">
+        <div class="city-perk">算力补贴：西部算力枢纽节点最低价</div>
+        <div class="city-perk">空间支持：礼嘉智慧公园零成本入驻</div>
+        <div class="city-perk">资金启动：重庆 AI 产业引导基金</div>
+        <div class="city-perk">税收优惠：西部大开发税收政策 15%</div>
+        <div class="city-perk">服务生态：成渝双城经济圈全覆盖</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROCESS -->
+<section id="process">
+  <div class="section-label reveal">// 怎么开始</div>
+  <h2 class="section-h2 reveal">五步，从想法到落地</h2>
+  <div class="process-steps reveal">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-title">行业定向</div>
+      <div class="step-desc">结合你的背景和市场趋势，选出最适合你的赛道</div>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-title">城市 & 政策匹配</div>
+      <div class="step-desc">精准匹配补贴政策，最大化你的启动资源</div>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-title">AI 工具搭建</div>
+      <div class="step-desc">配置你的工作流，一个人顶一个小团队</div>
+    </div>
+    <div class="step">
+      <div class="step-num">04</div>
+      <div class="step-title">产品开发上线</div>
+      <div class="step-desc">从原型到正式产品，全程技术支持</div>
+    </div>
+    <div class="step">
+      <div class="step-num">05</div>
+      <div class="step-title">获客 & 变现</div>
+      <div class="step-desc">启动增长飞轮，让收入自动滚动</div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section id="proof">
+  <div class="section-label reveal">// 真实案例</div>
+  <h2 class="section-h2 reveal">他们已经做到了</h2>
+  <div class="proof-grid reveal">
+    <div class="proof-card">
+      <div class="proof-result">月收入 ¥8.5万</div>
+      <p class="proof-quote">在职的时候总觉得创业是别人的事。加入 OPC 三个月后，用 AI 工具搭了一套知识付费体系，现在副业收入已经超过工资。</p>
+      <div class="proof-person">
+        <div class="proof-avatar">李</div>
+        <div>
+          <div class="proof-name">李晓萌</div>
+          <div class="proof-role">前互联网运营 · 现 OPC 创始人</div>
+        </div>
+      </div>
+    </div>
+    <div class="proof-card">
+      <div class="proof-result">拿到 ¥60万 补贴</div>
+      <p class="proof-quote">通过平台帮我匹配了深圳的 AI 专项补贴，加上算力券，相当于拿到了 60 万的"免费启动资金"。这些政策完全不知道怎么申请。</p>
+      <div class="proof-person">
+        <div class="proof-avatar">王</div>
+        <div>
+          <div class="proof-name">王泽宇</div>
+          <div class="proof-role">独立开发者 · 深圳</div>
+        </div>
+      </div>
+    </div>
+    <div class="proof-card">
+      <div class="proof-result">6 个月 GMV 破百万</div>
+      <p class="proof-quote">我是教育背景，完全不懂技术。平台帮我搭了 AI 助教工具，配了获客流程，第六个月 GMV 过了一百万。一个人就干成了。</p>
+      <div class="proof-person">
+        <div class="proof-avatar">张</div>
+        <div>
+          <div class="proof-name">张雅琳</div>
+          <div class="proof-role">前教师 · 教育 OPC 创始人</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <h2 class="cta-h2 reveal">你的公司，<br><em>今天就可以开始</em></h2>
+  <p class="cta-sub reveal">一次免费咨询，找到你专属的 OPC 路径。<br>政策资源 + AI 工具 + 行业路径，全部梳理清楚。</p>
+  <div class="cta-actions reveal">
+    <button class="btn-primary">预约免费咨询 →</button>
+    <button class="btn-ghost">加入社群先看看</button>
+  </div>
+  <p class="cta-note reveal">免费 · 无需注册 · 30 分钟战略梳理</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">OPC · 一人公司</div>
+  <div class="footer-links">
+    <a href="#">关于我们</a>
+    <a href="#">服务条款</a>
+    <a href="#">隐私政策</a>
+    <a href="#">联系我们</a>
+  </div>
+  <div class="footer-copy">© 2024 OPC · 一人公司 All rights reserved.</div>
+</footer>
+
+<script>
+  // Tab switching
+  function switchTab(tab) {
+    document.querySelectorAll('.cities-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  // Scroll reveal
+  const revealEls = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('visible'), 60);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+  revealEls.forEach(el => observer.observe(el));
+
+  // Animated counters
+  function animateCounter(el, target, suffix) {
+    let current = 0;
+    const step = target / 60;
+    const timer = setInterval(() => {
+      current += step;
+      if (current >= target) { current = target; clearInterval(timer); }
+      el.textContent = suffix === '万' 
+        ? '¥' + Math.floor(current) + suffix
+        : Math.floor(current) + (suffix || '');
+    }, 16);
+  }
+  const statsObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const nums = entry.target.querySelectorAll('.stat-num');
+        if (nums[0]) animateCounter(nums[0], 3200, '+');
+        if (nums[1]) animateCounter(nums[1], 850, '万');
+        if (nums[2]) animateCounter(nums[2], 6, '城市');
+        statsObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  const heroStats = document.querySelector('.hero-stats');
+  if (heroStats) statsObserver.observe(heroStats);
+</script>
+</body>
+</html>
