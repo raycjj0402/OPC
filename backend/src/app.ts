@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import 'dotenv/config';
 
 import authRoutes from './routes/auth';
@@ -17,9 +18,9 @@ import adminRoutes from './routes/admin/index';
 const app = express();
 
 // 安全中间件
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || '*',
   credentials: true,
 }));
 
@@ -55,9 +56,16 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// 404处理
-app.use((_req, res) => {
-  res.status(404).json({ message: '接口不存在' });
+// 生产环境：提供前端静态文件
+const publicPath = path.join(__dirname, '../public');
+app.use(express.static(publicPath));
+
+// SPA fallback：所有非API路由返回 index.html
+app.get('*', (_req, res) => {
+  const indexPath = path.join(publicPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) res.status(404).json({ message: '接口不存在' });
+  });
 });
 
 // 全局错误处理
