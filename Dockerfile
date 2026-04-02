@@ -35,4 +35,7 @@ COPY --from=frontend-builder /frontend/dist ./public
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "echo '--- Environment Check ---' && echo \"DATABASE_URL is ${DATABASE_URL:+SET}${DATABASE_URL:-NOT SET}\" && if [ -z \"$DATABASE_URL\" ]; then echo 'ERROR: DATABASE_URL is not set. Please configure it in Railway Variables.' && exit 1; fi && echo 'Running prisma db push...' && npx prisma db push --accept-data-loss && echo 'Starting server...' && node dist/server.js"]
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+CMD ["/start.sh"]
