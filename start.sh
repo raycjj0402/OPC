@@ -7,6 +7,9 @@ echo "🚀 启动 OPC 一人公司服务平台..."
 # 检查 Node.js
 if ! command -v node &> /dev/null; then
   echo "❌ 请先安装 Node.js (https://nodejs.org)"
+  echo "   下载地址: https://nodejs.org/en/download"
+  echo ""
+  echo "   如果使用 Railway/Docker 部署，请直接使用 backend/Dockerfile 和 frontend/Dockerfile"
   exit 1
 fi
 
