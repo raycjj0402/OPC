@@ -1,10 +1,14 @@
 import {
+  ChatConversationMessage,
   ChatModelConfig,
   ChatModelProvider,
+  ChatSearchCitation,
   DiagnosisAnswer,
-  DiagnosisQuestion,
+  DiagnosisDimension,
   NoifOnboardingProfile,
 } from '../types/chat';
+import { normalizeConversationalAnswer } from './noifDiagnosisService';
+import { searchWeb, webSearchEnabled } from './webSearchService';
 
 interface LlmMessage {
   role: 'system' | 'user' | 'assistant';
@@ -14,9 +18,23 @@ interface LlmMessage {
 interface AssistantGenerationInput {
   modelId?: string;
   profile: NoifOnboardingProfile;
-  latestAnswer: DiagnosisAnswer;
-  nextQuestion: DiagnosisQuestion | null;
-  answerCount: number;
+  conversation: ChatConversationMessage[];
+  answers: DiagnosisAnswer[];
+  latestUserMessage?: string;
+  mode: 'opening' | 'reply';
+}
+
+interface ParsedModelResponse {
+  assistantMessage: string;
+  quickReplies: string[];
+  reportReady: boolean;
+  analysis?: {
+    questionId?: string;
+    dimension?: DiagnosisDimension;
+    score?: number;
+    insight?: string;
+    value?: string;
+  };
 }
 
 interface AssistantGenerationResult {
@@ -24,6 +42,10 @@ interface AssistantGenerationResult {
   assistantMessage: string;
   quickReplies: string[];
   usedFallback: boolean;
+  reportReady: boolean;
+  normalizedAnswer: DiagnosisAnswer | null;
+  citations: ChatSearchCitation[];
+  searchQueries: string[];
 }
 
 interface AssistantStreamHandlers {
@@ -33,6 +55,8 @@ interface AssistantStreamHandlers {
 }
 
 const DEFAULT_MODEL_ID = 'mock:noif-socratic';
+const DIMENSION_ORDER: DiagnosisDimension[] = ['customer', 'funding', 'market', 'execution', 'compliance'];
+const WEB_SEARCH_KEYWORDS = ['城市', '租金', '商圈', '政策', '法规', '合规', '市场', '竞品', '客户', '行业', '预算', '成本', '选址'];
 
 function titleCaseProvider(provider: ChatModelProvider) {
   if (provider === 'openai') return 'ChatGPT';
@@ -108,45 +132,270 @@ function getModelConfig(modelId?: string): ChatModelConfig {
   };
 }
 
-function createFallbackAssistantMessage(input: AssistantGenerationInput) {
-  const acknowledgement = input.latestAnswer.score >= 75
-    ? '你这部分准备度还不错，说明你已经比大多数人更早开始算现实账。'
-    : input.latestAnswer.score >= 45
-      ? '这里已经暴露出一些关键盲区，继续往下问，通常就能看到真正的风险链条。'
-      : '这就是典型的高风险信号，很多人不是输在努力不够，而是输在这里没有提前看清。';
+function summarizeCoverage(answers: DiagnosisAnswer[]) {
+  const coverage = DIMENSION_ORDER.map((dimension) => {
+    const items = answers.filter((answer) => answer.dimension === dimension);
+    const average = items.length
+      ? Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length)
+      : 0;
 
-  if (!input.nextQuestion) {
-    return `${acknowledgement} 我已经拿到足够信息，可以开始为你生成个性化的避坑报告了。`;
+    return {
+      dimension,
+      count: items.length,
+      average,
+    };
+  });
+
+  const weakest = [...coverage]
+    .filter((item) => item.count > 0)
+    .sort((left, right) => left.average - right.average)
+    .slice(0, 2);
+
+  return {
+    coverage,
+    weakest,
+    enoughForReport:
+      answers.length >= 6 &&
+      coverage.filter((item) => item.count > 0).length >= 4,
+  };
+}
+
+function buildFallbackAnalysis(input: AssistantGenerationInput) {
+  if (!input.latestUserMessage) {
+    return null;
   }
 
-  return `${acknowledgement} 接下来我想继续追问一层：${input.nextQuestion.prompt}`;
+  const normalized = normalizeConversationalAnswer(
+    input.latestUserMessage,
+    input.profile,
+    undefined,
+    `turn_${input.answers.length + 1}`
+  );
+
+  return normalized;
+}
+
+function nextFallbackDimension(answers: DiagnosisAnswer[]) {
+  const counts = new Map<DiagnosisDimension, number>();
+  DIMENSION_ORDER.forEach((dimension) => counts.set(dimension, 0));
+  answers.forEach((answer) => counts.set(answer.dimension, (counts.get(answer.dimension) || 0) + 1));
+
+  return [...counts.entries()].sort((left, right) => left[1] - right[1])[0]?.[0] || 'customer';
+}
+
+function createFallbackAssistantMessage(input: AssistantGenerationInput, normalizedAnswer: DiagnosisAnswer | null) {
+  if (input.mode === 'opening') {
+    return `我先不按固定题库来问你。基于你在${input.profile.city}想做的${input.profile.industry}方向，我更想先确认一件最现实的事: 你现在最担心会踩的第一个坑，究竟是客户、资金、执行，还是合规？你可以直接把真实情况告诉我。`;
+  }
+
+  const coverage = summarizeCoverage(normalizedAnswer ? [...input.answers, normalizedAnswer] : input.answers);
+  if (coverage.enoughForReport) {
+    return '我已经拿到比较完整的风险画像了。接下来可以直接为你生成一份个性化的避坑报告，如果你还想补充一个最担心的问题，也可以继续聊一轮。';
+  }
+
+  const targetDimension = nextFallbackDimension(normalizedAnswer ? [...input.answers, normalizedAnswer] : input.answers);
+  const dimensionPrompt: Record<DiagnosisDimension, string> = {
+    customer: '你的第一批真实付费客户是谁，他们为什么现在就愿意买单？',
+    funding: '如果未来 3 个月收入不达预期，你的现金流和止损线准备到了什么程度？',
+    market: '你对所在城市、商圈或赛道的真实竞争情况，做过哪些实地验证？',
+    compliance: '合同、收款、主体、发票和版权这些边界，现在有哪些还是空白？',
+    execution: '如果项目开始后反复返工或需求变化，你现在的时间和交付承载力扛得住吗？',
+  };
+
+  const acknowledgement = normalizedAnswer
+    ? normalizedAnswer.score >= 72
+      ? '你这轮回答里已经有一些扎实准备了。'
+      : normalizedAnswer.score >= 48
+        ? '这里已经露出几个需要继续往下挖的风险点。'
+        : '这轮回答里有明显的高风险信号，需要继续追问。'
+    : '我们先把最关键的现实条件聊透。';
+
+  return `${acknowledgement} 我想继续追问 ${dimensionPrompt[targetDimension]}`;
+}
+
+function createFallbackQuickReplies(input: AssistantGenerationInput, reportReady: boolean) {
+  if (reportReady) {
+    return ['直接生成报告', '我再补充一点', '先看看当前结论'];
+  }
+
+  if (input.mode === 'opening') {
+    return ['我最担心客户不来', '我最担心钱不够', '我最担心执行扛不住'];
+  }
+
+  return ['继续往下问', '我补充一个细节', '先换个角度问我'];
 }
 
 function buildSystemPrompt() {
   return [
-    '你是 noif 的创业避坑对话助手。',
-    '你的职责不是鼓励创业，也不是直接下判断，而是像一个有实战经验的前辈一样，用对话追问暴露用户盲区。',
-    '回复要求：1-2 段中文，简洁、冷静、有洞察，不要长篇大论，不要列表。',
-    '如果存在下一题，先根据用户刚才的回答给一句现实反馈，再自然引出下一题。',
-    '如果已经问完，告诉用户可以生成风险报告。',
-    '不要使用 markdown。',
+    '你是 noif 的创业风险诊断助手。',
+    '你不是固定问卷，也不是鸡汤型顾问。你要像一个见过很多失败案例、但说话克制的创业前辈，用自然对话方式层层追问。',
+    '每一轮都要根据用户画像、历史对话、已有风险维度覆盖情况，决定最值得追问的点。',
+    '不要暴露你的内部结构化分析，不要说“我在给你打分”或“下一题是”。',
+    '回复风格要求：中文，简洁，有洞察，像 ChatGPT/Claude 那样自然，不要列表，不要 markdown。',
+    '如果信息还不够，就给一句现实反馈，然后继续追问一个最关键的问题。',
+    '如果信息已经足够支撑风险报告，就明确告诉用户现在可以生成报告，也允许用户继续补充。',
+    '如果提供了联网搜索摘要，可以把它们当作背景参考，但不要胡编没有给你的外部事实。',
+    '你必须只输出 JSON，不要输出 JSON 之外的任何文字。',
+    'JSON 格式如下：{"assistantMessage":"给用户看的自然回复","quickReplies":["可选快捷建议，最多3条"],"reportReady":false,"analysis":{"questionId":"turn_1","dimension":"customer","score":62,"insight":"一句内部归纳","value":"short_tag"}}',
+    'opening 模式下没有用户回答，analysis 可以省略。',
   ].join('\n');
 }
 
-function buildUserPrompt(input: AssistantGenerationInput) {
+function buildConversationTranscript(conversation: ChatConversationMessage[]) {
+  if (conversation.length === 0) {
+    return '暂无历史对话。';
+  }
+
+  return conversation
+    .slice(-12)
+    .map((message) => `${message.role === 'assistant' ? '助手' : '用户'}: ${message.content}`)
+    .join('\n');
+}
+
+function buildCoverageSummary(answers: DiagnosisAnswer[]) {
+  const coverage = summarizeCoverage(answers);
+  return coverage.coverage
+    .map((item) => `${item.dimension}: ${item.count}轮, 平均${item.average || 0}`)
+    .join(' | ');
+}
+
+function shouldUseWebSearch(input: AssistantGenerationInput) {
+  if (!webSearchEnabled()) return false;
+  if (input.mode === 'opening') return true;
+
+  const text = `${input.latestUserMessage || ''} ${input.profile.projectSummary || ''}`;
+  return WEB_SEARCH_KEYWORDS.some((keyword) => text.includes(keyword));
+}
+
+function buildSearchQueries(input: AssistantGenerationInput) {
+  const queries: string[] = [];
+  const projectName = input.profile.projectSummary || `${input.profile.city}${input.profile.industry}项目`;
+
+  if (input.profile.city && input.profile.industry) {
+    queries.push(`${input.profile.city} ${input.profile.industry} 创业 风险 成本 客户`);
+  }
+
+  if (input.profile.ventureType === 'STORE') {
+    queries.push(`${input.profile.city} ${input.profile.industry} 商圈 租金 客流`);
+  }
+
+  if (input.latestUserMessage) {
+    const keywords = WEB_SEARCH_KEYWORDS.filter((keyword) => input.latestUserMessage?.includes(keyword)).slice(0, 3);
+    if (keywords.length > 0) {
+      queries.push(`${input.profile.city} ${input.profile.industry} ${keywords.join(' ')} ${projectName}`);
+    } else {
+      queries.push(`${projectName} ${input.latestUserMessage.slice(0, 24)} 创业 风险`);
+    }
+  }
+
+  return [...new Set(queries.map((item) => item.trim()).filter(Boolean))].slice(0, 2);
+}
+
+async function collectWebContext(input: AssistantGenerationInput) {
+  if (!shouldUseWebSearch(input)) {
+    return { searchQueries: [] as string[], citations: [] as ChatSearchCitation[] };
+  }
+
+  const queries = buildSearchQueries(input);
+  const aggregated: ChatSearchCitation[] = [];
+
+  for (const query of queries) {
+    try {
+      const results = await searchWeb(query, 3);
+      aggregated.push(...results);
+    } catch (error) {
+      console.error('[web-search] query failed:', query, error);
+    }
+  }
+
+  const unique = aggregated.filter((item, index, array) => array.findIndex((candidate) => candidate.url === item.url) === index);
+  return {
+    searchQueries: queries,
+    citations: unique.slice(0, 4),
+  };
+}
+
+function buildUserPrompt(input: AssistantGenerationInput, citations: ChatSearchCitation[]) {
   return [
-    `用户项目：${input.profile.projectSummary || `${input.profile.city}${input.profile.industry}项目`}`,
-    `城市：${input.profile.city}`,
-    `行业：${input.profile.industry}`,
-    `预算：${input.profile.budgetRange}`,
-    `刚回答的问题：${input.latestAnswer.questionId}`,
-    `用户原始回答：${input.latestAnswer.answer}`,
-    `系统归纳的风险信号：${input.latestAnswer.insight}`,
-    input.nextQuestion
-      ? `下一题（必须自然过渡到这里）：${input.nextQuestion.prompt} | 说明：${input.nextQuestion.detail}`
-      : '当前没有下一题，请告诉用户现在可以生成报告。',
-    '请直接输出最终对用户可见的话，不要输出 JSON，不要解释你的思路。',
-  ].join('\n');
+    `模式: ${input.mode}`,
+    `项目: ${input.profile.projectSummary || `${input.profile.city}${input.profile.industry}项目`}`,
+    `城市: ${input.profile.city}`,
+    `行业: ${input.profile.industry}`,
+    `预算: ${input.profile.budgetRange}`,
+    `创业类型: ${input.profile.ventureType}`,
+    `已有回答轮数: ${input.answers.length}`,
+    `风险维度覆盖: ${buildCoverageSummary(input.answers)}`,
+    `历史对话:\n${buildConversationTranscript(input.conversation)}`,
+    input.latestUserMessage ? `用户本轮最新输入: ${input.latestUserMessage}` : '当前是开场轮，还没有用户输入。',
+    citations.length
+      ? `联网搜索摘要:\n${citations.map((item, index) => `${index + 1}. ${item.title} | ${item.url} | ${item.snippet}`).join('\n')}`
+      : '联网搜索摘要: 无',
+    '请只返回 JSON。',
+  ].join('\n\n');
+}
+
+function extractJsonBlock(text: string) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  return text.slice(start, end + 1);
+}
+
+function parseModelResponse(rawText: string): ParsedModelResponse | null {
+  const jsonBlock = extractJsonBlock(rawText);
+  if (!jsonBlock) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(jsonBlock) as ParsedModelResponse;
+    if (!parsed || typeof parsed !== 'object' || !parsed.assistantMessage) {
+      return null;
+    }
+    return {
+      assistantMessage: String(parsed.assistantMessage || '').trim(),
+      quickReplies: Array.isArray(parsed.quickReplies)
+        ? parsed.quickReplies.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+        : [],
+      reportReady: Boolean(parsed.reportReady),
+      analysis: parsed.analysis
+        ? {
+            questionId: parsed.analysis.questionId ? String(parsed.analysis.questionId) : undefined,
+            dimension: parsed.analysis.dimension,
+            score: typeof parsed.analysis.score === 'number' ? parsed.analysis.score : undefined,
+            insight: parsed.analysis.insight ? String(parsed.analysis.insight) : undefined,
+            value: parsed.analysis.value ? String(parsed.analysis.value) : undefined,
+          }
+        : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function materializeNormalizedAnswer(
+  input: AssistantGenerationInput,
+  parsed: ParsedModelResponse | null
+) {
+  if (input.mode === 'opening' || !input.latestUserMessage) {
+    return null;
+  }
+
+  const fallback = buildFallbackAnalysis(input);
+  if (!parsed?.analysis) {
+    return fallback;
+  }
+
+  return {
+    questionId: parsed.analysis.questionId || `turn_${input.answers.length + 1}`,
+    dimension: parsed.analysis.dimension || fallback?.dimension || 'customer',
+    answer: input.latestUserMessage,
+    value: parsed.analysis.value || fallback?.value || 'major_gap',
+    score: Math.max(0, Math.min(100, Math.round(parsed.analysis.score ?? fallback?.score ?? 50))),
+    insight: parsed.analysis.insight || fallback?.insight || '这轮回答还需要继续追问，才能看清真正的风险边界。',
+  } satisfies DiagnosisAnswer;
 }
 
 async function requestOpenAiCompatibleCompletion(
@@ -170,7 +419,8 @@ async function requestOpenAiCompatibleCompletion(
     },
     body: JSON.stringify({
       model,
-      temperature: 0.4,
+      temperature: 0.35,
+      max_tokens: 900,
       messages,
     }),
   });
@@ -209,8 +459,8 @@ async function requestAnthropicCompletion(model: string, messages: LlmMessage[])
     body: JSON.stringify({
       model,
       system,
-      max_tokens: 500,
-      temperature: 0.4,
+      max_tokens: 900,
+      temperature: 0.35,
       messages: anthropicMessages,
     }),
   });
@@ -228,44 +478,63 @@ async function requestAnthropicCompletion(model: string, messages: LlmMessage[])
 
 export async function generateAssistantTurn(input: AssistantGenerationInput): Promise<AssistantGenerationResult> {
   const model = getModelConfig(input.modelId);
-  const quickReplies = input.nextQuestion ? input.nextQuestion.options.map((option) => option.label) : [];
-  const fallbackMessage = createFallbackAssistantMessage(input);
+  const webContext = await collectWebContext(input);
+  const fallbackNormalizedAnswer = buildFallbackAnalysis(input);
+  const fallbackCoverage = summarizeCoverage(fallbackNormalizedAnswer ? [...input.answers, fallbackNormalizedAnswer] : input.answers);
+  const fallbackMessage = createFallbackAssistantMessage(input, fallbackNormalizedAnswer);
+  const fallbackQuickReplies = createFallbackQuickReplies(input, fallbackCoverage.enoughForReport);
 
   if (!model.enabled || model.provider === 'mock') {
     return {
       model,
       assistantMessage: fallbackMessage,
-      quickReplies,
+      quickReplies: fallbackQuickReplies,
       usedFallback: true,
+      reportReady: fallbackCoverage.enoughForReport,
+      normalizedAnswer: fallbackNormalizedAnswer,
+      citations: webContext.citations,
+      searchQueries: webContext.searchQueries,
     };
   }
 
   const messages: LlmMessage[] = [
     { role: 'system', content: buildSystemPrompt() },
-    { role: 'user', content: buildUserPrompt(input) },
+    { role: 'user', content: buildUserPrompt(input, webContext.citations) },
   ];
 
   try {
-    let assistantMessage = '';
+    let rawMessage = '';
     if (model.provider === 'anthropic') {
-      assistantMessage = await requestAnthropicCompletion(model.model, messages);
+      rawMessage = await requestAnthropicCompletion(model.model, messages);
     } else {
-      assistantMessage = await requestOpenAiCompatibleCompletion(model.provider, model.model, messages);
+      rawMessage = await requestOpenAiCompatibleCompletion(model.provider, model.model, messages);
     }
+
+    const parsed = parseModelResponse(rawMessage);
+    const normalizedAnswer = materializeNormalizedAnswer(input, parsed);
+    const postCoverage = summarizeCoverage(normalizedAnswer ? [...input.answers, normalizedAnswer] : input.answers);
 
     return {
       model,
-      assistantMessage: assistantMessage || fallbackMessage,
-      quickReplies,
-      usedFallback: !assistantMessage,
+      assistantMessage: parsed?.assistantMessage || fallbackMessage,
+      quickReplies: parsed?.quickReplies?.length ? parsed.quickReplies : fallbackQuickReplies,
+      usedFallback: !parsed,
+      reportReady: parsed?.reportReady ?? postCoverage.enoughForReport,
+      normalizedAnswer,
+      citations: webContext.citations,
+      searchQueries: webContext.searchQueries,
     };
   } catch (error) {
     console.error('[chat-model] falling back to mock response:', error);
     return {
       model,
       assistantMessage: fallbackMessage,
-      quickReplies,
+      quickReplies: fallbackQuickReplies,
       usedFallback: true,
+      reportReady: fallbackCoverage.enoughForReport,
+      normalizedAnswer: fallbackNormalizedAnswer,
+      citations: webContext.citations,
+      searchQueries: webContext.searchQueries,
     };
   }
 }

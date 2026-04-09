@@ -6,6 +6,8 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Payment from './pages/Payment';
+import PaymentCheckout from './pages/PaymentCheckout';
+import PaymentResult from './pages/PaymentResult';
 import ProfilePage from './pages/Profile';
 import Register from './pages/Register';
 import { useAuthStore } from './store/authStore';
@@ -44,6 +46,22 @@ export default function App() {
           element={
             <RequireAuth>
               <Payment />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/payment/result"
+          element={
+            <RequireAuth>
+              <PaymentResult />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/payment/checkout"
+          element={
+            <RequireAuth>
+              <PaymentCheckout />
             </RequireAuth>
           }
         />

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DiagnosisAnswer, NoifReport, OnboardingProfile } from '../types/noif';
+import { DiagnosisAnswer, DiagnosisMessage, NoifReport, OnboardingProfile } from '../types/noif';
 
 export interface User {
   id: string;
@@ -18,6 +18,7 @@ export interface User {
   } & Partial<OnboardingProfile>;
   reports?: NoifReport[];
   diagnosisAnswers?: DiagnosisAnswer[];
+  diagnosisMessages?: DiagnosisMessage[];
 }
 
 interface AuthState {

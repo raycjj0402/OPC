@@ -70,6 +70,23 @@ export interface DiagnosisAnswer {
   insight: string;
 }
 
+export interface ChatCitation {
+  title: string;
+  url: string;
+  snippet: string;
+  source?: string;
+}
+
+export interface DiagnosisMessage {
+  id: string;
+  role: 'assistant' | 'user';
+  content: string;
+  createdAt?: string;
+  quickReplies?: string[];
+  citations?: ChatCitation[];
+  modelLabel?: string;
+}
+
 export interface ReportDimensionScore {
   key: DiagnosisDimension;
   label: string;

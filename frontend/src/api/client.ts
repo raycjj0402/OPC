@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { DiagnosisAnswer, DiagnosisMessage, OnboardingProfile } from '../types/noif';
 
 const api = axios.create({
   baseURL: '/api',
@@ -66,23 +67,31 @@ export const onboardingApi = {
 // Chat / Diagnosis
 export const chatApi = {
   getModels: () => api.get('/chat/models'),
+  opening: (data: {
+    profile: OnboardingProfile;
+    conversation?: DiagnosisMessage[];
+    answers?: DiagnosisAnswer[];
+    modelId?: string;
+  }) => api.post('/chat/opening', data),
   respond: (data: {
-    profile: Record<string, unknown>;
+    profile: OnboardingProfile;
     latestUserMessage: string;
-    answers?: Array<Record<string, unknown>>;
+    conversation?: DiagnosisMessage[];
+    answers?: DiagnosisAnswer[];
     modelId?: string;
   }) => api.post('/chat/respond', data),
   buildReport: (data: {
-    profile: Record<string, unknown>;
-    answers: Array<Record<string, unknown>>;
+    profile: OnboardingProfile;
+    answers: DiagnosisAnswer[];
   }) => api.post('/chat/report', data),
 };
 
 export async function streamChatResponse(
   data: {
-    profile: Record<string, unknown>;
+    profile: OnboardingProfile;
     latestUserMessage: string;
-    answers?: Array<Record<string, unknown>>;
+    conversation?: DiagnosisMessage[];
+    answers?: DiagnosisAnswer[];
     modelId?: string;
   },
   handlers: {

@@ -1,5 +1,6 @@
 import {
   DiagnosisAnswer,
+  DiagnosisDimension,
   DiagnosisQuestion,
   NoifOnboardingProfile,
   NoifReport,
@@ -272,6 +273,105 @@ export function normalizeAnswer(question: DiagnosisQuestion, answerText: string)
     value: matched.value,
     score: matched.score,
     insight: matched.insight,
+  };
+}
+
+const dimensionKeywordMap: Record<DiagnosisDimension, string[]> = {
+  funding: ['预算', '资金', '现金流', '回本', '成本', '亏', '止损', '毛利', '租金', '投入'],
+  market: ['市场', '商圈', '选址', '竞品', '需求', '城市', '门店', '位置', '调研', '行业'],
+  compliance: ['合同', '发票', '执照', '合规', '版权', '税', '许可', '主体', '法律', '风险'],
+  customer: ['客户', '获客', '转化', '渠道', '复购', '下单', '流量', '付费', '成交', '咨询'],
+  execution: ['时间', '交付', '返工', '团队', '执行', '主业', '情绪', '家庭', '外包', '精力'],
+};
+
+function scoreConversationalAnswer(answerText: string) {
+  const text = answerText.toLowerCase().replace(/\s+/g, '');
+  const negativeScore = negativeKeywords.reduce((count, keyword) => count + (text.includes(keyword) ? 1 : 0), 0);
+  const positiveScore = positiveKeywords.reduce((count, keyword) => count + (text.includes(keyword) ? 1 : 0), 0);
+  const base = 55 + positiveScore * 12 - negativeScore * 12;
+  return Math.max(18, Math.min(92, base));
+}
+
+function buildConversationalValue(score: number) {
+  if (score >= 80) return 'strong_signal';
+  if (score >= 60) return 'promising_but_unstable';
+  if (score >= 40) return 'major_gap';
+  return 'high_risk';
+}
+
+function buildConversationalInsight(dimension: DiagnosisDimension, score: number) {
+  const summaries: Record<DiagnosisDimension, { low: string; mid: string; high: string }> = {
+    funding: {
+      low: '资金与现金流边界还不清晰，启动后很容易被现实节奏压缩试错空间。',
+      mid: '资金上已有一定准备，但还需要把回本周期和止损线算得更实。',
+      high: '你对资金韧性和投入边界有一定意识，这会显著降低早期失控概率。',
+    },
+    market: {
+      low: '市场验证仍偏想象层面，容易高估需求、低估竞争或位置影响。',
+      mid: '你已经开始观察市场，但还需要更多真实样本来支撑判断。',
+      high: '你对市场和场景的现实感比较强，继续细化样本会更稳。',
+    },
+    compliance: {
+      low: '合规边界仍比较模糊，后续可能在合同、收款或责任归属上踩坑。',
+      mid: '你有一定合规意识，但还需要把关键边界真正落成方案。',
+      high: '你对合规和责任边界的意识较强，这是很重要的底盘。',
+    },
+    customer: {
+      low: '获客和付费验证仍比较弱，最危险的是把“有人需要”当成“有人会付钱”。',
+      mid: '客户方向已经有轮廓，但转化链路和真实付费还需要继续验证。',
+      high: '你已经触碰到真实客户验证，这会明显提升项目启动的确定性。',
+    },
+    execution: {
+      low: '执行承载力偏脆弱，项目一旦进入返工或并发状态就容易失控。',
+      mid: '执行层面有一定准备，但抗波动能力还需要继续补强。',
+      high: '你的时间、交付和协同边界相对清楚，更接近可持续推进状态。',
+    },
+  };
+
+  if (score >= 75) return summaries[dimension].high;
+  if (score >= 50) return summaries[dimension].mid;
+  return summaries[dimension].low;
+}
+
+export function inferDiagnosisDimension(answerText: string, profile?: Partial<NoifOnboardingProfile>): DiagnosisDimension {
+  const text = `${answerText} ${profile?.projectSummary || ''} ${profile?.industry || ''}`.toLowerCase();
+  const ranking = (Object.keys(dimensionKeywordMap) as DiagnosisDimension[])
+    .map((dimension) => ({
+      dimension,
+      score: dimensionKeywordMap[dimension].reduce((sum, keyword) => sum + (text.includes(keyword.toLowerCase()) ? 1 : 0), 0),
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  if (ranking[0]?.score > 0) {
+    return ranking[0].dimension;
+  }
+
+  if (profile?.ventureType === 'STORE') {
+    return 'market';
+  }
+
+  if (profile?.ventureType === 'SIDE_HUSTLE') {
+    return 'execution';
+  }
+
+  return 'customer';
+}
+
+export function normalizeConversationalAnswer(
+  answerText: string,
+  profile?: Partial<NoifOnboardingProfile>,
+  suggestedDimension?: DiagnosisDimension,
+  questionId?: string
+): DiagnosisAnswer {
+  const dimension = suggestedDimension || inferDiagnosisDimension(answerText, profile);
+  const score = scoreConversationalAnswer(answerText);
+  return {
+    questionId: questionId || `turn_${Date.now()}`,
+    dimension,
+    answer: answerText,
+    value: buildConversationalValue(score),
+    score,
+    insight: buildConversationalInsight(dimension, score),
   };
 }
 

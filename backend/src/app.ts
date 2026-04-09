@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin/index';
 import chatRoutes from './routes/chat';
 
 const app = express();
+app.set('trust proxy', 1);
 
 // 安全中间件
 app.use(helmet({ contentSecurityPolicy: false }));

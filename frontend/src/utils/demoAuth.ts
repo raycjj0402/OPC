@@ -12,6 +12,7 @@ function buildBaseUser(email: string, name?: string | null): User {
     onboardingCompleted: false,
     reports: [],
     diagnosisAnswers: [],
+    diagnosisMessages: [],
   };
 }
 

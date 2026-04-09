@@ -1,14 +1,9 @@
 import { Router, Response } from 'express';
 import { authenticate, requireSubscription } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import {
-  buildReport,
-  getCurrentQuestion,
-  getQuestionsForType,
-  normalizeAnswer,
-} from '../services/noifDiagnosisService';
+import { buildReport } from '../services/noifDiagnosisService';
 import { generateAssistantTurn, getAvailableChatModels, streamAssistantTurn } from '../services/chatModelService';
-import { DiagnosisAnswer, NoifOnboardingProfile } from '../types/chat';
+import { ChatConversationMessage, DiagnosisAnswer, NoifOnboardingProfile } from '../types/chat';
 
 const router = Router();
 
@@ -23,45 +18,33 @@ router.get('/models', (_req, res) => {
   });
 });
 
-function validateRespondPayload(body: {
-  profile?: NoifOnboardingProfile;
-  latestUserMessage?: string;
-  answers?: DiagnosisAnswer[];
-}) {
-  const { profile, latestUserMessage } = body;
-
+function validateProfile(profile?: NoifOnboardingProfile) {
   if (!profile?.ventureType || !profile.city || !profile.industry || !profile.budgetRange) {
     return '缺少必要的用户画像信息';
-  }
-
-  if (!latestUserMessage || !latestUserMessage.trim()) {
-    return '请输入本轮回答内容';
   }
 
   return null;
 }
 
-function buildNextStep(profile: NoifOnboardingProfile, answers: DiagnosisAnswer[], latestUserMessage: string) {
-  const currentQuestion = getCurrentQuestion(profile.ventureType, answers);
-  if (!currentQuestion) {
-    return { error: '当前问诊已完成，请直接生成报告' as string };
-  }
+function normalizeConversation(conversation?: ChatConversationMessage[]) {
+  if (!Array.isArray(conversation)) return [];
 
-  const normalizedAnswer = normalizeAnswer(currentQuestion, latestUserMessage.trim());
-  const updatedAnswers = [...answers.filter((item) => item.questionId !== currentQuestion.id), normalizedAnswer];
-  const orderedAnswers = getQuestionsForType(profile.ventureType)
-    .map((question) => updatedAnswers.find((item) => item.questionId === question.id))
-    .filter(Boolean) as DiagnosisAnswer[];
+  return conversation
+    .filter((message) => message && (message.role === 'assistant' || message.role === 'user') && String(message.content || '').trim())
+    .map((message, index) => ({
+      id: message.id || `msg_${index + 1}`,
+      role: message.role,
+      content: String(message.content || '').trim(),
+      createdAt: message.createdAt,
+      citations: Array.isArray(message.citations) ? message.citations : [],
+      quickReplies: Array.isArray(message.quickReplies) ? message.quickReplies.map((item) => String(item)) : [],
+      modelLabel: message.modelLabel,
+    }));
+}
 
-  const nextQuestion = getCurrentQuestion(profile.ventureType, orderedAnswers);
-  const reportReady = !nextQuestion;
-
-  return {
-    normalizedAnswer,
-    answers: orderedAnswers,
-    nextQuestion,
-    reportReady,
-  };
+function mergeAnswers(existing: DiagnosisAnswer[], nextAnswer: DiagnosisAnswer | null) {
+  if (!nextAnswer) return existing;
+  return [...existing, nextAnswer];
 }
 
 function writeSse(res: Response, event: string, data: unknown) {
@@ -69,64 +52,87 @@ function writeSse(res: Response, event: string, data: unknown) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-router.post('/respond', async (req: AuthRequest, res: Response) => {
+router.post('/opening', async (req: AuthRequest, res: Response) => {
   const {
     profile,
-    latestUserMessage,
+    conversation = [],
     answers = [],
     modelId,
   }: {
     profile?: NoifOnboardingProfile;
-    latestUserMessage?: string;
+    conversation?: ChatConversationMessage[];
     answers?: DiagnosisAnswer[];
     modelId?: string;
   } = req.body;
 
-  const validationError = validateRespondPayload({ profile, latestUserMessage, answers });
+  const validationError = validateProfile(profile);
   if (validationError) {
     return res.status(400).json({ message: validationError });
-  }
-
-  const step = buildNextStep(profile!, answers, latestUserMessage!);
-  if ('error' in step) {
-    return res.status(400).json({ message: step.error });
-  }
-
-  if (step.reportReady) {
-    return res.json({
-      reportReady: true,
-      normalizedAnswer: step.normalizedAnswer,
-      answers: step.answers,
-      assistantMessage: '我已经拿到足够信息了。现在可以开始为你生成一份个性化的避坑报告。',
-      quickReplies: [],
-      nextQuestion: null,
-      model: null,
-      usedFallback: true,
-    });
   }
 
   const assistant = await generateAssistantTurn({
     modelId,
     profile: profile!,
-    latestAnswer: step.normalizedAnswer,
-    nextQuestion: step.nextQuestion,
-    answerCount: step.answers.length,
+    conversation: normalizeConversation(conversation),
+    answers: Array.isArray(answers) ? answers : [],
+    mode: 'opening',
   });
 
   res.json({
-    reportReady: false,
-    normalizedAnswer: step.normalizedAnswer,
-    answers: step.answers,
+    reportReady: assistant.reportReady,
+    answers,
     assistantMessage: assistant.assistantMessage,
     quickReplies: assistant.quickReplies,
-    nextQuestion: step.nextQuestion
-      ? {
-          id: step.nextQuestion.id,
-          dimension: step.nextQuestion.dimension,
-          prompt: step.nextQuestion.prompt,
-          detail: step.nextQuestion.detail,
-        }
-      : null,
+    citations: assistant.citations,
+    searchQueries: assistant.searchQueries,
+    model: assistant.model,
+    usedFallback: assistant.usedFallback,
+  });
+});
+
+router.post('/respond', async (req: AuthRequest, res: Response) => {
+  const {
+    profile,
+    latestUserMessage,
+    conversation = [],
+    answers = [],
+    modelId,
+  }: {
+    profile?: NoifOnboardingProfile;
+    latestUserMessage?: string;
+    conversation?: ChatConversationMessage[];
+    answers?: DiagnosisAnswer[];
+    modelId?: string;
+  } = req.body;
+
+  const validationError = validateProfile(profile);
+  if (validationError) {
+    return res.status(400).json({ message: validationError });
+  }
+
+  if (!latestUserMessage || !latestUserMessage.trim()) {
+    return res.status(400).json({ message: '请输入本轮回答内容' });
+  }
+
+  const assistant = await generateAssistantTurn({
+    modelId,
+    profile: profile!,
+    conversation: normalizeConversation(conversation),
+    answers: Array.isArray(answers) ? answers : [],
+    latestUserMessage: latestUserMessage.trim(),
+    mode: 'reply',
+  });
+
+  const updatedAnswers = mergeAnswers(Array.isArray(answers) ? answers : [], assistant.normalizedAnswer);
+
+  res.json({
+    reportReady: assistant.reportReady,
+    normalizedAnswer: assistant.normalizedAnswer,
+    answers: updatedAnswers,
+    assistantMessage: assistant.assistantMessage,
+    quickReplies: assistant.quickReplies,
+    citations: assistant.citations,
+    searchQueries: assistant.searchQueries,
     model: assistant.model,
     usedFallback: assistant.usedFallback,
   });
@@ -136,24 +142,28 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
   const {
     profile,
     latestUserMessage,
+    conversation = [],
     answers = [],
     modelId,
   }: {
     profile?: NoifOnboardingProfile;
     latestUserMessage?: string;
+    conversation?: ChatConversationMessage[];
     answers?: DiagnosisAnswer[];
     modelId?: string;
   } = req.body;
 
-  const validationError = validateRespondPayload({ profile, latestUserMessage, answers });
+  const validationError = validateProfile(profile);
   if (validationError) {
     return res.status(400).json({ message: validationError });
   }
 
-  const step = buildNextStep(profile!, answers, latestUserMessage!);
-  if ('error' in step) {
-    return res.status(400).json({ message: step.error });
+  if (!latestUserMessage || !latestUserMessage.trim()) {
+    return res.status(400).json({ message: '请输入本轮回答内容' });
   }
+
+  const normalizedConversation = normalizeConversation(conversation);
+  const existingAnswers = Array.isArray(answers) ? answers : [];
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -161,59 +171,44 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
-  writeSse(res, 'ack', {
-    reportReady: step.reportReady,
-    normalizedAnswer: step.normalizedAnswer,
-    answers: step.answers,
-  });
-
-  if (step.reportReady) {
-    writeSse(res, 'meta', {
-      assistantMessage: '我已经拿到足够信息了。现在可以开始为你生成一份个性化的避坑报告。',
-      quickReplies: [],
-      nextQuestion: null,
-      model: null,
-      usedFallback: true,
-      reportReady: true,
-    });
-    writeSse(res, 'done', { ok: true });
-    return res.end();
-  }
-
   try {
     await streamAssistantTurn(
       {
         modelId,
         profile: profile!,
-        latestAnswer: step.normalizedAnswer,
-        nextQuestion: step.nextQuestion,
-        answerCount: step.answers.length,
+        conversation: normalizedConversation,
+        answers: existingAnswers,
+        latestUserMessage: latestUserMessage.trim(),
+        mode: 'reply',
       },
       {
         onStart: async (result) => {
+          const updatedAnswers = mergeAnswers(existingAnswers, result.normalizedAnswer);
+          writeSse(res, 'ack', {
+            reportReady: result.reportReady,
+            normalizedAnswer: result.normalizedAnswer,
+            answers: updatedAnswers,
+          });
           writeSse(res, 'start', {
             model: result.model,
-            reportReady: false,
+            reportReady: result.reportReady,
           });
         },
         onChunk: async (chunk) => {
           writeSse(res, 'delta', { content: chunk });
         },
         onComplete: async (result) => {
+          const updatedAnswers = mergeAnswers(existingAnswers, result.normalizedAnswer);
           writeSse(res, 'meta', {
             assistantMessage: result.assistantMessage,
             quickReplies: result.quickReplies,
-            nextQuestion: step.nextQuestion
-              ? {
-                  id: step.nextQuestion.id,
-                  dimension: step.nextQuestion.dimension,
-                  prompt: step.nextQuestion.prompt,
-                  detail: step.nextQuestion.detail,
-                }
-              : null,
+            citations: result.citations,
+            searchQueries: result.searchQueries,
+            normalizedAnswer: result.normalizedAnswer,
+            answers: updatedAnswers,
             model: result.model,
             usedFallback: result.usedFallback,
-            reportReady: false,
+            reportReady: result.reportReady,
           });
         },
       }
@@ -239,7 +234,7 @@ router.post('/report', async (req: AuthRequest, res: Response) => {
     answers?: DiagnosisAnswer[];
   } = req.body;
 
-  if (!profile?.ventureType || !profile.city || !profile.industry || !profile.budgetRange) {
+  if (validateProfile(profile)) {
     return res.status(400).json({ message: '缺少必要的用户画像信息' });
   }
 
@@ -247,7 +242,7 @@ router.post('/report', async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ message: '请先完成至少一轮有效问诊' });
   }
 
-  const report = buildReport(profile, answers);
+  const report = buildReport(profile!, answers);
   res.json({ report });
 });
 

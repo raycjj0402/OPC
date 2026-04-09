@@ -1,10 +1,20 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, BrainCircuit, CheckCircle2, CircleDollarSign, Sparkles, TicketPercent } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  BrainCircuit,
+  CheckCircle2,
+  CircleDollarSign,
+  ShieldCheck,
+  Sparkles,
+  TicketPercent,
+  WalletCards,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { pricingPlans } from '../data/noif';
 import { useAuthStore } from '../store/authStore';
-import { paymentApi } from '../api/client';
+import { authApi, paymentApi } from '../api/client';
 
 const FREE_COUPON_CODE = 'ZY85CJ';
 
@@ -18,6 +28,7 @@ export default function Payment() {
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'ALIPAY' | 'WECHAT'>('ALIPAY');
 
   const currentPlan = user?.plan || 'FREE';
 
@@ -28,19 +39,86 @@ export default function Payment() {
 
   const displayPrice = couponApplied ? '0' : selected?.price || '0';
 
+  const syncCurrentUser = async () => {
+    const { data } = await authApi.me();
+    updateUser({
+      plan: data.plan,
+      consultationsLeft: data.consultationsLeft,
+      onboardingCompleted: data.onboardingCompleted,
+      onboarding: data.onboarding,
+    });
+  };
+
+  const submitGatewayForm = (action: string, fields: Record<string, string>) => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = action;
+    form.style.display = 'none';
+
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+  };
+
   const handlePurchase = async () => {
     if (!selected) return;
 
     setSubmitting(true);
-    window.setTimeout(() => {
-      updateUser({
-        plan: selectedPlan,
-        consultationsLeft: selectedPlan === 'ADVANCED' ? 30 : 10,
-      });
-      toast.success(couponApplied ? '优惠码已生效，已 0 元解锁版本' : '版本已解锁，开始你的 noif 问诊');
-      navigate('/onboarding');
+
+    try {
+      const { data } = await paymentApi.createOrder(
+        selectedPlan,
+        paymentMethod,
+        couponApplied ? couponCode : undefined
+      );
+
+      if (data.paymentMode === 'free') {
+        await syncCurrentUser();
+        toast.success('优惠码已生效，已 0 元解锁版本');
+        navigate(data.redirectUrl || '/onboarding');
+        return;
+      }
+
+      if (data.gateway?.action && data.gateway?.fields) {
+        submitGatewayForm(data.gateway.action, data.gateway.fields);
+        return;
+      }
+
+      if (data.paymentMode === 'api_qr' && data.gateway) {
+        sessionStorage.setItem(
+          `noif_payment_checkout_${data.orderId}`,
+          JSON.stringify({
+            orderId: data.orderId,
+            tradeNo: data.gateway.tradeNo,
+            qrcode: data.gateway.qrcode,
+            codeUrl: data.gateway.codeUrl,
+            type: data.gateway.type,
+            pollHint: data.gateway.pollHint,
+          })
+        );
+        navigate(`/payment/checkout?orderId=${data.orderId}`);
+        return;
+      }
+
+      if (data.payUrl) {
+        window.location.href = data.payUrl;
+        return;
+      }
+
+      throw new Error('支付通道返回异常，请稍后重试');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || '创建订单失败，请稍后重试');
+    } finally {
       setSubmitting(false);
-    }, 900);
+    }
   };
 
   const applyCoupon = async () => {
@@ -52,13 +130,7 @@ export default function Payment() {
 
     setCouponLoading(true);
     try {
-      if (import.meta.env.DEV) {
-        if (normalized !== FREE_COUPON_CODE) {
-          throw new Error('优惠码无效');
-        }
-      } else {
-        await paymentApi.validateCoupon(normalized);
-      }
+      await paymentApi.validateCoupon(normalized);
 
       setCouponCode(normalized);
       setCouponApplied(normalized === FREE_COUPON_CODE);
@@ -156,6 +228,36 @@ export default function Payment() {
             <div className="mt-8 space-y-5 rounded-[1.9rem] border border-white/10 bg-white/5 p-5">
               <div>
                 <div className="mb-3 flex items-center gap-2 text-sm text-slate-300">
+                  <WalletCards size={16} className="text-cyan-300" />
+                  选择支付方式
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { id: 'ALIPAY', label: '支付宝' },
+                    { id: 'WECHAT', label: '微信支付' },
+                  ].map((method) => {
+                    const active = paymentMethod === method.id;
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(method.id as 'ALIPAY' | 'WECHAT')}
+                        className={`rounded-2xl border px-4 py-4 text-left text-sm transition ${
+                          active
+                            ? 'border-cyan-300/60 bg-cyan-400/10 text-white shadow-[0_10px_40px_rgba(0,180,255,0.18)]'
+                            : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-400/20'
+                        }`}
+                      >
+                        <div className="font-medium">{method.label}</div>
+                        <div className="mt-1 text-xs text-slate-500">点击后跳转到官方支付页面完成付款</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center gap-2 text-sm text-slate-300">
                   <TicketPercent size={16} className="text-cyan-300" />
                   输入优惠码
                 </div>
@@ -199,8 +301,21 @@ export default function Payment() {
                 <span className="text-slate-400">交付结果</span>
                 <span className="font-semibold text-white">个性化风险报告</span>
               </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">支付链路</span>
+                <span className="font-semibold text-white">{paymentMethod === 'ALIPAY' ? '支付宝跳转支付' : '微信跳转支付'}</span>
+              </div>
               <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/10 p-4 text-sm leading-7 text-cyan-100">
                 noif 不替你做决定，但会把你没看见的成本、客户、合规和执行风险提前翻出来。
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
+                <div className="flex items-center gap-2 text-sm font-medium text-white">
+                  <ShieldCheck size={16} className="text-cyan-300" />
+                  支付说明
+                </div>
+                <p className="mt-2">
+                  点击确认后会先创建真实订单，再跳转到第三方支付页。支付完成后会自动回到 noif，并同步开通你的套餐权限。
+                </p>
               </div>
             </div>
 
@@ -210,7 +325,7 @@ export default function Payment() {
             </button>
 
             <p className="mt-4 text-center text-xs leading-6 text-slate-500">
-              当前为 MVP 演示流程，支付按钮会直接解锁版本并进入问诊向导。
+              使用优惠码 `ZY85CJ` 时会直接 0 元开通；其余情况将跳转真实支付页面。
             </p>
           </div>
         </div>

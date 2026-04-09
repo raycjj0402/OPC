@@ -1,4 +1,10 @@
 export type ChatModelProvider = 'mock' | 'openai' | 'anthropic' | 'kimi';
+export type DiagnosisDimension =
+  | 'funding'
+  | 'market'
+  | 'compliance'
+  | 'customer'
+  | 'execution';
 
 export interface NoifOnboardingProfile {
   ventureType: 'SIDE_HUSTLE' | 'STORE' | 'STARTUP_C' | 'STARTUP_B';
@@ -30,7 +36,7 @@ export interface DiagnosisOption {
 
 export interface DiagnosisQuestion {
   id: string;
-  dimension: 'funding' | 'market' | 'compliance' | 'customer' | 'execution';
+  dimension: DiagnosisDimension;
   prompt: string;
   detail: string;
   ventureTypes: NoifOnboardingProfile['ventureType'][];
@@ -39,11 +45,28 @@ export interface DiagnosisQuestion {
 
 export interface DiagnosisAnswer {
   questionId: string;
-  dimension: DiagnosisQuestion['dimension'];
+  dimension: DiagnosisDimension;
   answer: string;
   value: string;
   score: number;
   insight: string;
+}
+
+export interface ChatSearchCitation {
+  title: string;
+  url: string;
+  snippet: string;
+  source?: string;
+}
+
+export interface ChatConversationMessage {
+  id: string;
+  role: 'assistant' | 'user';
+  content: string;
+  createdAt?: string;
+  citations?: ChatSearchCitation[];
+  quickReplies?: string[];
+  modelLabel?: string;
 }
 
 export interface ChatModelConfig {
@@ -56,7 +79,7 @@ export interface ChatModelConfig {
 }
 
 export interface NoifReportDimensionScore {
-  key: DiagnosisQuestion['dimension'];
+  key: DiagnosisDimension;
   label: string;
   score: number;
   weight: number;
