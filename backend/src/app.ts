@@ -15,6 +15,7 @@ import expertRoutes from './routes/experts';
 import communityRoutes from './routes/community';
 import adminRoutes from './routes/admin/index';
 import chatRoutes from './routes/chat';
+import debugRoutes from './routes/debug';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -53,6 +54,7 @@ app.use('/api/experts', expertRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/debug', debugRoutes);
 
 // 健康检查
 app.get('/health', (_req, res) => {
