@@ -62,6 +62,90 @@ export const onboardingApi = {
     api.put('/onboarding/update', data),
 };
 
+// Chat / Diagnosis
+export const chatApi = {
+  getModels: () => api.get('/chat/models'),
+  respond: (data: {
+    profile: Record<string, unknown>;
+    latestUserMessage: string;
+    answers?: Array<Record<string, unknown>>;
+    modelId?: string;
+  }) => api.post('/chat/respond', data),
+  buildReport: (data: {
+    profile: Record<string, unknown>;
+    answers: Array<Record<string, unknown>>;
+  }) => api.post('/chat/report', data),
+};
+
+export async function streamChatResponse(
+  data: {
+    profile: Record<string, unknown>;
+    latestUserMessage: string;
+    answers?: Array<Record<string, unknown>>;
+    modelId?: string;
+  },
+  handlers: {
+    onEvent?: (event: string, payload: any) => void;
+    onDelta?: (chunk: string) => void;
+    onDone?: () => void;
+  }
+) {
+  const token = localStorage.getItem('opc_token');
+  const response = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`stream request failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = 'message';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() || '';
+
+    for (const part of parts) {
+      const lines = part.split('\n');
+      let payload = '';
+      currentEvent = 'message';
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          currentEvent = line.slice(6).trim();
+        }
+        if (line.startsWith('data:')) {
+          payload += line.slice(5).trim();
+        }
+      }
+
+      if (!payload) continue;
+      const parsed = JSON.parse(payload);
+      handlers.onEvent?.(currentEvent, parsed);
+
+      if (currentEvent === 'delta') {
+        handlers.onDelta?.(parsed.content || '');
+      }
+
+      if (currentEvent === 'done') {
+        handlers.onDone?.();
+      }
+    }
+  }
+}
+
 // Learning
 export const learningApi = {
   getPath: () => api.get('/learning/path'),

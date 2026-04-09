@@ -14,6 +14,7 @@ import governmentRoutes from './routes/government';
 import expertRoutes from './routes/experts';
 import communityRoutes from './routes/community';
 import adminRoutes from './routes/admin/index';
+import chatRoutes from './routes/chat';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use('/api/government', governmentRoutes);
 app.use('/api/experts', expertRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 健康检查
 app.get('/health', (_req, res) => {

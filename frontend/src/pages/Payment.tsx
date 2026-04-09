@@ -1,208 +1,147 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, BadgeCheck, BrainCircuit, CircleDollarSign, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowLeft, Shield, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { paymentApi } from '../api/client';
+import { pricingPlans } from '../data/noif';
 import { useAuthStore } from '../store/authStore';
-
-const plans = [
-  {
-    id: 'BASIC',
-    name: '基础套餐',
-    price: 199,
-    highlight: false,
-    features: [
-      '个性化学习模块（全解锁）',
-      '政府资源库（7城市）',
-      'AI工具指南 + 工作流教程',
-      '行业落地方法论',
-      '开发资源中心（四阶段）',
-      '获客方法论案例库',
-      'OPC社区权限',
-    ],
-  },
-  {
-    id: 'ADVANCED',
-    name: '进阶套餐',
-    price: 999,
-    highlight: true,
-    tag: '推荐',
-    features: [
-      '✅ 基础套餐全部权益',
-      '2次行业专家1对1咨询',
-      '每次约60分钟深度陪伴',
-      '会后专属总结文档',
-      '专家主页+评分+预约日历',
-      '咨询全程邮件通知',
-      '优先客服通道',
-    ],
-  },
-];
 
 export default function Payment() {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuthStore();
-  const [selected, setSelected] = useState('ADVANCED');
-  const [payMethod, setPayMethod] = useState('WECHAT');
-  const [loading, setLoading] = useState(false);
+  const { user, updateUser } = useAuthStore();
+  const [selectedPlan, setSelectedPlan] = useState<'BASIC' | 'ADVANCED'>(
+    user?.plan === 'ADVANCED' ? 'ADVANCED' : 'BASIC'
+  );
+  const [submitting, setSubmitting] = useState(false);
 
   const currentPlan = user?.plan || 'FREE';
-  const isUpgrade = currentPlan === 'BASIC' && selected === 'ADVANCED';
 
-  const handlePay = async () => {
-    if (!isAuthenticated) {
-      navigate('/register');
-      return;
-    }
-    if (currentPlan === selected) {
-      return toast.error('您已拥有该套餐');
-    }
-    setLoading(true);
-    try {
-      let res;
-      if (isUpgrade) {
-        res = await paymentApi.upgrade(payMethod);
-      } else {
-        res = await paymentApi.createOrder(selected, payMethod);
-      }
-      navigate(`/payment/mock?orderId=${res.data.orderId}&amount=${res.data.amount}`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || '创建订单失败，请重试');
-    } finally {
-      setLoading(false);
-    }
+  const selected = useMemo(
+    () => pricingPlans.find((plan) => plan.id === selectedPlan),
+    [selectedPlan]
+  );
+
+  const handlePurchase = async () => {
+    if (!selected) return;
+
+    setSubmitting(true);
+    window.setTimeout(() => {
+      updateUser({
+        plan: selectedPlan,
+        consultationsLeft: selectedPlan === 'ADVANCED' ? 30 : 10,
+      });
+      toast.success('版本已解锁，开始你的 noif 问诊');
+      navigate('/onboarding');
+      setSubmitting(false);
+    }, 900);
   };
 
-  const selectedPlan = plans.find(p => p.id === selected)!;
-  const displayPrice = isUpgrade ? 800 : selectedPlan?.price;
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-6">
-          <ArrowLeft size={16} /> 返回
+    <div className="min-h-screen bg-[#050b14] px-4 py-8 text-white sm:px-6">
+      <div className="noif-grid fixed inset-0 opacity-30 pointer-events-none" />
+      <div className="mx-auto max-w-6xl">
+        <button type="button" onClick={() => navigate('/')} className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white">
+          <ArrowLeft size={16} />
+          返回首页
         </button>
 
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">选择套餐</h1>
-          {isUpgrade && (
-            <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-full px-4 py-1.5 text-sm">
-              <Zap size={14} /> 升级只需补差价 ¥800，历史数据全部保留
-            </div>
-          )}
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs uppercase tracking-[0.28em] text-cyan-300">
+            <CircleDollarSign size={14} />
+            Step 01 · 选择版本
+          </div>
+          <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-black tracking-[-0.04em] text-white sm:text-6xl">
+            在真正投入之前，
+            <span className="noif-gradient-text block">先把坑看清楚。</span>
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-400 sm:text-lg">
+            两个版本都不是买“答案”，而是买一套帮你提前拆风险的问诊与报告系统。
+          </p>
         </div>
 
-        {/* Plan selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {plans.map(plan => {
-            const isOwned = currentPlan === plan.id;
-            const isDisabled = isOwned || (currentPlan === 'ADVANCED') ||
-              (currentPlan === 'BASIC' && plan.id === 'BASIC');
+        <div className="mt-14 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-6 md:grid-cols-2">
+            {pricingPlans.map((plan) => {
+              const active = selectedPlan === plan.id;
+              const owned = currentPlan === plan.id;
 
-            return (
-              <div
-                key={plan.id}
-                onClick={() => !isDisabled && setSelected(plan.id)}
-                className={`relative rounded-2xl p-6 border-2 transition-all cursor-pointer ${
-                  isDisabled ? 'opacity-50 cursor-not-allowed' :
-                  selected === plan.id
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-gray-200 bg-white hover:border-purple-300'
-                }`}
-              >
-                {plan.tag && !isDisabled && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-                    {plan.tag}
-                  </div>
-                )}
-                {isOwned && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                    当前套餐
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-bold text-gray-900">{plan.name}</h3>
-                    <div className="text-2xl font-bold text-purple-600 mt-1">
-                      ¥{plan.id === 'ADVANCED' && isUpgrade ? '800' : plan.price}
-                      <span className="text-sm text-gray-500 font-normal ml-1">
-                        {plan.id === 'ADVANCED' && isUpgrade ? '（补差价）' : '买断'}
-                      </span>
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setSelectedPlan(plan.id as 'BASIC' | 'ADVANCED')}
+                  className={`noif-panel relative h-full p-7 text-left transition ${
+                    active ? 'ring-2 ring-cyan-300/60 shadow-[0_25px_80px_rgba(20,140,255,0.18)]' : 'hover:border-cyan-400/20'
+                  }`}
+                >
+                  {plan.featured && (
+                    <div className="absolute right-6 top-6 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-cyan-200">
+                      推荐
                     </div>
-                  </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                    selected === plan.id ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
-                  }`}>
-                    {selected === plan.id && <Check size={14} className="text-white" />}
-                  </div>
-                </div>
+                  )}
+                  {owned && (
+                    <div className="absolute left-6 top-6 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-emerald-200">
+                      当前已拥有
+                    </div>
+                  )}
 
-                <ul className="space-y-2">
-                  {plan.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                      <Check size={14} className="text-purple-500 flex-shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+                  <div className="mt-10 text-sm uppercase tracking-[0.26em] text-slate-500">{plan.label}</div>
+                  <div className="mt-3 flex items-end gap-3">
+                    <div className="text-5xl font-black tracking-[-0.04em] text-white">¥{plan.price}</div>
+                    <div className="pb-2 text-sm text-slate-500 line-through">¥{plan.originalPrice}</div>
+                  </div>
+                  <p className="mt-5 text-sm leading-7 text-slate-400">{plan.description}</p>
+
+                  <div className="mt-8 space-y-3">
+                    {plan.features.map((feature) => (
+                      <div key={feature} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-7 text-slate-200">
+                        <BadgeCheck size={16} className="mt-1 shrink-0 text-cyan-300" />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="noif-panel h-fit p-7">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/12 text-cyan-200">
+                <BrainCircuit size={22} />
               </div>
-            );
-          })}
-        </div>
-
-        {/* Payment method */}
-        <div className="card mb-6">
-          <h3 className="font-semibold text-gray-900 mb-4">支付方式</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { id: 'WECHAT', label: '微信支付', icon: '💚' },
-              { id: 'ALIPAY', label: '支付宝', icon: '💙' },
-            ].map(m => (
-              <button
-                key={m.id}
-                onClick={() => setPayMethod(m.id)}
-                className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                  payMethod === m.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-xl">{m.icon}</span>
-                <span className="font-medium text-gray-700">{m.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Order summary */}
-        <div className="card mb-6">
-          <h3 className="font-semibold text-gray-900 mb-4">订单摘要</h3>
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>{selectedPlan?.name}</span>
-            <span>¥{selectedPlan?.price}</span>
-          </div>
-          {isUpgrade && (
-            <div className="flex justify-between text-sm text-green-600 mb-2">
-              <span>已付基础套餐抵扣</span>
-              <span>-¥199</span>
+              <div>
+                <div className="text-xs uppercase tracking-[0.26em] text-cyan-300">你将解锁</div>
+                <div className="mt-1 text-2xl font-semibold text-white">{selected?.label}</div>
+              </div>
             </div>
-          )}
-          <div className="border-t border-gray-100 pt-3 flex justify-between font-bold text-gray-900">
-            <span>实付金额</span>
-            <span className="text-purple-600 text-xl">¥{displayPrice}</span>
+
+            <div className="mt-8 space-y-5 rounded-[1.9rem] border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">本次价格</span>
+                <span className="font-semibold text-white">¥{selected?.price}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">问诊方式</span>
+                <span className="font-semibold text-white">结构化文字问诊</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">交付结果</span>
+                <span className="font-semibold text-white">个性化风险报告</span>
+              </div>
+              <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/10 p-4 text-sm leading-7 text-cyan-100">
+                noif 不替你做决定，但会把你没看见的成本、客户、合规和执行风险提前翻出来。
+              </div>
+            </div>
+
+            <button type="button" className="btn-primary mt-8 w-full justify-center text-base" onClick={handlePurchase} disabled={submitting}>
+              <Sparkles size={18} />
+              {submitting ? '正在解锁...' : `确认解锁 ${selected?.label}`}
+            </button>
+
+            <p className="mt-4 text-center text-xs leading-6 text-slate-500">
+              当前为 MVP 演示流程，支付按钮会直接解锁版本并进入问诊向导。
+            </p>
           </div>
-        </div>
-
-        <button
-          onClick={handlePay}
-          disabled={loading || currentPlan === selected}
-          className="btn-primary w-full text-lg py-4"
-        >
-          {loading ? '处理中...' : `确认支付 ¥${displayPrice}`}
-        </button>
-
-        <div className="flex items-center justify-center gap-2 mt-4 text-sm text-gray-500">
-          <Shield size={14} />
-          <span>支付安全加密 · 7天无理由退款 · 买断制无续费</span>
         </div>
       </div>
     </div>

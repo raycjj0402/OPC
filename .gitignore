@@ -27,6 +27,7 @@ backend/prisma/dev.db-journal
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # TypeScript cache
 *.tsbuildinfo

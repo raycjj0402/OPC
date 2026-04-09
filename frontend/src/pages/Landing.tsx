@@ -1,282 +1,342 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, BrainCircuit, CircleAlert, MoveRight, ScanSearch, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, Star, Zap, BookOpen, Users, Building2, TrendingUp } from 'lucide-react';
+import { caseStudies, landingPainPoints } from '../data/noif';
 import { useAuthStore } from '../store/authStore';
 
-const features = [
-  { icon: BookOpen, title: '个性化学习路径', desc: '基于城市+行业+资源偏好，生成专属学习模块' },
-  { icon: Building2, title: '政府资源库', desc: '7城市创业政策，AI智能问答，一键收藏' },
-  { icon: Zap, title: 'AI工具指南', desc: '精选20+AI工具教程，覆盖内容/开发/运营全场景' },
-  { icon: TrendingUp, title: '获客方法论', desc: '小红书、私域、直播等全渠道获客实战案例' },
-  { icon: Users, title: '专家1对1咨询', desc: '进阶套餐可预约行业专家深度咨询（999元套餐）' },
-  { icon: Star, title: 'OPC创业者社区', desc: '与同类创业者交流，精华帖+AMA活动' },
+const heroSignals = [
+  { label: '城市', value: '上海' },
+  { label: '赛道', value: '实体 / 副业 / 服务' },
+  { label: '输出', value: '风险报告' },
 ];
 
-const plans = [
+const differenceRows = [
   {
-    name: '基础套餐',
-    price: 199,
-    tag: null,
-    features: [
-      '个性化学习模块（全解锁）',
-      '政府资源库（7城市）',
-      'AI工具指南',
-      '行业落地方法论',
-      '开发资源中心',
-      '获客方法论案例库',
-      'OPC社区权限',
-    ],
-    cta: '立即购买 ¥199',
-    variant: 'secondary',
+    label: '输入方式',
+    generic: '用户问什么，AI 回什么',
+    noif: 'noif 主动追问，把盲区挖出来',
   },
   {
-    name: '进阶套餐',
-    price: 999,
-    tag: '最受欢迎',
-    features: [
-      '基础套餐全部权益',
-      '2次行业专家1对1咨询',
-      '每次约60分钟深度陪伴',
-      '会后专属总结文档',
-      '专家匹配+日历预约',
-      '优先客服通道',
-    ],
-    cta: '立即购买 ¥999',
-    variant: 'primary',
+    label: '信息来源',
+    generic: '公开信息 + 常识总结',
+    noif: '城市、行业、预算、模式组合后的现实约束',
   },
-];
-
-const testimonials = [
-  { name: '李明', role: '知识付费创业者', city: '北京', content: '通过OPC平台的引导，我在3个月内成功搭建了自己的知识付费体系，月收入突破了2万元。', rating: 5 },
-  { name: '王芳', role: '独立开发者', city: '深圳', content: '政府资源库帮我找到了深圳的算力补贴，省了好几万。AI工具教程也超级实用！', rating: 5 },
-  { name: '张伟', role: '电商创业者', city: '杭州', content: '专家1对1咨询是真的值，帮我避免了很多弯路，1小时的建议抵得上我自己摸索半年。', rating: 5 },
+  {
+    label: '交付结果',
+    generic: '泛化建议',
+    noif: '只属于你的创业风险报告',
+  },
 ];
 
 export default function Landing() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
+  const [activeCase, setActiveCase] = useState(0);
 
-  const handleCTA = () => {
-    if (isAuthenticated) {
-      if (user?.plan !== 'FREE') navigate('/dashboard');
-      else navigate('/payment');
-    } else {
-      navigate('/register');
-    }
-  };
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveCase((current) => (current + 1) % caseStudies.length);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const primaryRoute = useMemo(() => {
+    if (!isAuthenticated) return '/register';
+    if (user?.plan === 'FREE') return '/payment';
+    if (!user?.onboardingCompleted) return '/onboarding';
+    return '/diagnosis';
+  }, [isAuthenticated, user]);
+
+  const active = caseStudies[activeCase];
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 glass border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
-              OPC
+    <div className="min-h-screen overflow-hidden bg-[#050b14] text-white">
+      <div className="noif-grid fixed inset-0 opacity-20 pointer-events-none" />
+      <div className="noif-particles fixed inset-0 pointer-events-none opacity-60" />
+      <div className="noif-glow absolute left-[-10rem] top-[-4rem] h-[28rem] w-[28rem] opacity-40" />
+      <div className="noif-glow absolute bottom-[-8rem] right-[-6rem] h-[34rem] w-[34rem] opacity-35" />
+
+      <nav className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[#08111d]/76 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
+          <button type="button" onClick={() => navigate('/')} className="flex items-center gap-3 text-left">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#89ecff_0%,#55c7ff_45%,#247cff_100%)] shadow-[0_14px_44px_rgba(36,124,255,0.32)]">
+              <span className="text-lg font-black text-[#04121e]">N</span>
             </div>
-            <span className="font-bold text-gray-900">一人公司服务平台</span>
+            <div>
+              <div className="text-lg font-semibold tracking-tight text-white">noif</div>
+              <div className="text-xs text-slate-500">No More Ifs</div>
+            </div>
+          </button>
+
+          <div className="hidden items-center gap-10 text-sm text-slate-400 md:flex">
+            <button type="button" className="transition hover:text-white" onClick={() => document.getElementById('pain')?.scrollIntoView({ behavior: 'smooth' })}>
+              Why Now
+            </button>
+            <button type="button" className="transition hover:text-white" onClick={() => document.getElementById('difference')?.scrollIntoView({ behavior: 'smooth' })}>
+              Product Logic
+            </button>
+            <button type="button" className="transition hover:text-white" onClick={() => document.getElementById('cases')?.scrollIntoView({ behavior: 'smooth' })}>
+              Cases
+            </button>
           </div>
+
           <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <button onClick={() => navigate('/dashboard')} className="btn-primary text-sm py-2">
-                进入平台
-              </button>
-            ) : (
-              <>
-                <button onClick={() => navigate('/login')} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2">
-                  登录
-                </button>
-                <button onClick={() => navigate('/register')} className="btn-primary text-sm py-2">
-                  免费注册
-                </button>
-              </>
-            )}
+            <button type="button" className="hidden text-sm text-slate-400 transition hover:text-white sm:inline-flex" onClick={() => navigate('/login')}>
+              登录
+            </button>
+            <button type="button" className="btn-primary text-sm" onClick={() => navigate(primaryRoute)}>
+              试试 noif
+            </button>
           </div>
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-purple-950 via-violet-900 to-purple-800 text-white">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-purple-400 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-20 w-96 h-96 bg-violet-400 rounded-full blur-3xl" />
-        </div>
-        <div className="relative max-w-6xl mx-auto px-4 py-24 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm mb-6">
-            <Zap size={14} className="text-yellow-300" />
-            <span>已帮助 2000+ 创业者走上正轨</span>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-bold leading-tight mb-6">
-            一人公司的<span className="text-yellow-300">起跑线</span>
-          </h1>
-          <p className="text-xl text-purple-200 max-w-2xl mx-auto mb-10 leading-relaxed">
-            付费后通过个性化引导，为你生成专属学习路径。
-            整合政府补贴、AI工具、行业方法论，让每个创业者第一步就站在巨人的肩膀上。
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={handleCTA}
-              className="w-full sm:w-auto bg-white text-purple-700 hover:bg-purple-50 px-8 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-2xl shadow-purple-900/40"
-            >
-              ¥199 立即开始 <ChevronRight size={20} />
-            </button>
-            <button
-              onClick={() => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-purple-200 hover:text-white text-sm flex items-center gap-1"
-            >
-              查看套餐详情 →
-            </button>
-          </div>
-          <p className="mt-6 text-purple-300 text-sm">买断制，无订阅，终身使用</p>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-4 py-20">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">一站式创业资源，开箱即用</h2>
-          <p className="text-gray-500">告别信息碎片化，所有创业者需要的资源都在这里</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="p-6 rounded-2xl border border-gray-100 hover:border-purple-200 hover:shadow-lg hover:shadow-purple-50 transition-all group">
-              <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
-                <Icon size={22} className="text-purple-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
-              <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+      <section className="relative px-5 pb-24 pt-32 sm:px-8 sm:pb-28 sm:pt-40">
+        <div className="mx-auto grid max-w-7xl gap-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+          <div className="relative z-10 max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/18 bg-cyan-300/8 px-4 py-2 text-[11px] uppercase tracking-[0.34em] text-cyan-200">
+              <Sparkles size={13} />
+              AI Risk Navigation
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* How it works */}
-      <section className="bg-gray-50 py-20">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">4步，生成你的专属创业路径</h2>
-            <p className="text-gray-500">付费后立即进入个性化引导，平均5分钟完成</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {[
-              { step: '01', title: '选择城市', desc: '7个城市可选，系统自动识别IP' },
-              { step: '02', title: '选择行业', desc: '6大创业方向，最多选2个' },
-              { step: '03', title: '资源偏好', desc: '5种资源类型，按需勾选' },
-              { step: '04', title: '生成路径', desc: '专属学习模块立即生成' },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="text-center">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-violet-600 text-white font-bold text-lg flex items-center justify-center mx-auto mb-4">
-                  {step}
+            <h1 className="mt-8 text-5xl font-black leading-[1.02] tracking-[-0.05em] text-white sm:text-6xl lg:text-7xl">
+              如果当时有人告诉我
+              <span className="mt-2 block noif-gradient-text">这件事就好了</span>
+            </h1>
+
+            <div className="mt-8 space-y-4 text-lg leading-8 text-slate-300 sm:text-xl">
+              <p>每 10 个创业讲 “如果” 的人，8 个在 1 年内关门。</p>
+              <p>不是不够努力，是有些关键问题，从来没人提前告诉你。</p>
+            </div>
+
+            <div className="mt-10 border-l border-cyan-300/26 pl-5">
+              <div className="text-xs uppercase tracking-[0.28em] text-slate-500">定位</div>
+              <p className="mt-3 max-w-2xl text-xl font-semibold leading-8 text-white sm:text-2xl">
+                noif，在你开店 / 创业前，帮你提前找出最容易踩的坑。
+              </p>
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <button type="button" className="btn-primary group text-base sm:text-lg" onClick={() => navigate(primaryRoute)}>
+                试试 noif
+                <ArrowRight size={18} className="transition group-hover:translate-x-1" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+                onClick={() => document.getElementById('difference')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                先看它为什么不同
+                <MoveRight size={15} />
+              </button>
+            </div>
+
+            <div className="mt-12 grid grid-cols-3 gap-6 border-t border-white/8 pt-6">
+              {[
+                { number: '5', label: '风险维度' },
+                { number: '1', label: '份专属报告' },
+                { number: '90', label: '天路线图' },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="text-2xl font-semibold text-white sm:text-3xl">{item.number}</div>
+                  <div className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">{item.label}</div>
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
-                <p className="text-gray-500 text-sm">{desc}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* Testimonials */}
-      <section className="max-w-6xl mx-auto px-4 py-20">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">创业者真实反馈</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map(({ name, role, city, content, rating }) => (
-            <div key={name} className="card">
-              <div className="flex gap-1 mb-4">
-                {Array.from({ length: rating }).map((_, i) => (
-                  <Star key={i} size={14} className="text-yellow-400 fill-yellow-400" />
+          <div className="relative">
+            <div className="signal-board mx-auto max-w-[34rem]">
+              <div className="signal-meta">
+                <span>Founder Precheck</span>
+                <span>Risk Scan Online</span>
+              </div>
+
+              <div className="signal-stage">
+                <div className="signal-rings">
+                  <div className="signal-ring signal-ring-lg" />
+                  <div className="signal-ring signal-ring-md" />
+                  <div className="signal-ring signal-ring-sm" />
+                  <div className="signal-core">
+                    <BrainCircuit size={26} />
+                  </div>
+                  <div className="signal-dot signal-dot-a" />
+                  <div className="signal-dot signal-dot-b" />
+                  <div className="signal-dot signal-dot-c" />
+                  <div className="signal-sweep" />
+                </div>
+
+                <div className="signal-aside">
+                  {heroSignals.map((item) => (
+                    <div key={item.label} className="signal-chip">
+                      <div className="signal-chip-label">{item.label}</div>
+                      <div className="signal-chip-value">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {[
+                  { icon: ScanSearch, label: '本地化', value: '城市 x 行业 x 模式' },
+                  { icon: CircleAlert, label: '盲区', value: '提前暴露' },
+                  { icon: BrainCircuit, label: '报告', value: '只属于你' },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="signal-summary">
+                    <Icon size={16} className="text-cyan-200" />
+                    <div className="mt-3 text-xs uppercase tracking-[0.22em] text-slate-500">{label}</div>
+                    <div className="mt-2 text-sm font-medium text-white">{value}</div>
+                  </div>
                 ))}
               </div>
-              <p className="text-gray-700 text-sm leading-relaxed mb-4">"{content}"</p>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold">
-                  {name[0]}
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{name}</div>
-                  <div className="text-xs text-gray-500">{role} · {city}</div>
-                </div>
-              </div>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="plans" className="bg-gradient-to-br from-gray-900 to-purple-950 text-white py-20">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-4">买断制，无订阅</h2>
-            <p className="text-gray-400">一次付费，终身使用。基础套餐可随时补差价升级。</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {plans.map((plan) => (
-              <div
-                key={plan.name}
-                className={`relative rounded-2xl p-8 border ${
-                  plan.variant === 'primary'
-                    ? 'bg-gradient-to-br from-purple-600 to-violet-600 border-purple-500'
-                    : 'bg-white/5 border-white/10'
-                }`}
-              >
-                {plan.tag && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-full">
-                    {plan.tag}
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold">¥{plan.price}</span>
-                    <span className="text-sm opacity-70">买断</span>
-                  </div>
+      <section id="pain" className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
+        <div className="grid gap-12 border-t border-white/8 pt-14 lg:grid-cols-[0.88fr_1.12fr]">
+          <div>
+            <div className="text-xs uppercase tracking-[0.3em] text-cyan-300">Pain Pattern</div>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">你是不是也这样想过</h2>
+            <div className="mt-8 space-y-6">
+              {landingPainPoints.map((item, index) => (
+                <div key={item} className="flex gap-5 border-b border-white/8 pb-6">
+                  <div className="text-sm text-slate-500">0{index + 1}</div>
+                  <p className="text-lg leading-8 text-slate-200">{item}</p>
                 </div>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-center gap-3 text-sm">
-                      <Check size={16} className={plan.variant === 'primary' ? 'text-yellow-300' : 'text-purple-400'} />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => navigate(isAuthenticated ? '/payment' : '/register')}
-                  className={`w-full py-3 rounded-xl font-semibold transition-all ${
-                    plan.variant === 'primary'
-                      ? 'bg-white text-purple-700 hover:bg-purple-50'
-                      : 'bg-purple-600 text-white hover:bg-purple-500'
-                  }`}
-                >
-                  {plan.cta}
-                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center">
+            <div className="w-full rounded-[2.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(8,18,31,0.92),rgba(4,10,18,0.92))] p-8 shadow-[0_28px_100px_rgba(3,10,20,0.35)] sm:p-10">
+              <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Reality</div>
+              <div className="mt-5 text-6xl font-black leading-none tracking-[-0.06em] text-white sm:text-7xl">68%</div>
+              <p className="mt-4 max-w-xl text-2xl font-semibold leading-9 text-cyan-200">
+                的创业者启动时，说不出 10 个真实付费意向。
+              </p>
+              <p className="mt-8 max-w-xl text-base leading-8 text-slate-400">
+                真正的问题不是你有没有热情，而是你还没有把现金流、客户、合规和执行成本一起放到现实里算过。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="difference" className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
+        <div className="grid gap-14 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="max-w-xl">
+            <div className="text-xs uppercase tracking-[0.3em] text-cyan-300">Difference</div>
+            <h2 className="mt-4 text-4xl font-black tracking-[-0.04em] text-white">
+              我们只做一件事
+              <span className="mt-2 block text-slate-300">消除你的 “如果”</span>
+            </h2>
+            <p className="mt-8 text-lg leading-8 text-slate-300">
+              不同于通用 AI 只给通用建议，noif 结合真实行业垂类信息与自研诊断逻辑，深度挖掘你未来可能踩的坑，让你提前看见风险。
+            </p>
+            <p className="mt-10 border-l border-cyan-300/24 pl-5 text-base leading-8 text-white">
+              通用 AI 会告诉你 “要注意资金和客户”，而我们会根据你的城市、行业、预算、模式，生成一份只属于你的创业风险报告。
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-[2.25rem] border border-white/10 bg-[#08131f]/90">
+            <div className="grid grid-cols-[120px_1fr_1fr] border-b border-white/8 px-6 py-5 text-xs uppercase tracking-[0.26em] text-slate-500 sm:px-8">
+              <div>对比维度</div>
+              <div>通用 AI</div>
+              <div>noif</div>
+            </div>
+
+            {differenceRows.map((row) => (
+              <div key={row.label} className="grid grid-cols-[120px_1fr_1fr] gap-6 border-b border-white/8 px-6 py-6 last:border-b-0 sm:px-8">
+                <div className="text-sm font-medium text-white">{row.label}</div>
+                <div className="text-sm leading-7 text-slate-400">{row.generic}</div>
+                <div className="text-sm leading-7 text-cyan-100">{row.noif}</div>
               </div>
             ))}
           </div>
-          <p className="text-center text-gray-500 text-sm mt-6">
-            已是基础套餐用户？补差价 ¥800 即可升级进阶套餐，历史数据全部保留。
-          </p>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
-              OPC
-            </div>
-            <span className="font-bold text-white">一人公司服务平台</span>
+      <section id="cases" className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
+        <div className="flex flex-col gap-6 border-t border-white/8 pt-14 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[0.3em] text-cyan-300">Case Preview</div>
+            <h2 className="mt-4 text-4xl font-black tracking-[-0.04em] text-white">真实场景，不同的风险结构</h2>
           </div>
-          <p className="text-sm mb-4">让每一个想创业的人，第一步就站在巨人的肩膀上</p>
-          <div className="flex justify-center gap-6 text-sm">
-            <a href="#" className="hover:text-white transition-colors">隐私政策</a>
-            <a href="#" className="hover:text-white transition-colors">服务条款</a>
-            <a href="#" className="hover:text-white transition-colors">联系客服</a>
+
+          <div className="flex flex-wrap gap-2">
+            {caseStudies.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveCase(index)}
+                className={`rounded-full border px-4 py-2 text-sm transition ${
+                  activeCase === index
+                    ? 'border-cyan-300/40 bg-cyan-300/12 text-white'
+                    : 'border-white/10 bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                案例 {index + 1}
+              </button>
+            ))}
           </div>
-          <p className="mt-6 text-xs text-gray-600">© 2026 OPC一人公司服务平台 · 保留所有权利</p>
         </div>
-      </footer>
+
+        <div className="mt-10 grid gap-8 lg:grid-cols-[0.78fr_1.22fr]">
+          <div className="space-y-5">
+            <div className="text-xs uppercase tracking-[0.26em] text-slate-500">案例背景</div>
+            <h3 className="text-3xl font-semibold leading-tight text-white">{active.title}</h3>
+            <div className="space-y-5 text-base leading-8 text-slate-300">
+              {active.background.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[2.25rem] border border-white/10 bg-[#091320]/88 p-6 sm:p-8">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-[0.26em] text-cyan-300">Noif 专业分析</div>
+              <div className="text-xs text-slate-500">动态轮播</div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              {active.analysis.map((paragraph, index) => (
+                <div key={paragraph} className={`case-line ${index === 0 ? 'case-line-strong' : ''}`}>
+                  <div className="case-line-index">0{index + 1}</div>
+                  <p className="text-base leading-8">{paragraph}</p>
+                </div>
+              ))}
+            </div>
+
+            {active.evidence ? (
+              <div className="mt-8 rounded-[1.75rem] border border-cyan-300/12 bg-cyan-300/[0.06] p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">行业数据</div>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{active.evidence}</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section id="cta" className="mx-auto max-w-5xl px-5 pb-24 pt-12 text-center sm:px-8">
+        <div className="border-t border-white/8 pt-14">
+          <div className="text-xs uppercase tracking-[0.3em] text-cyan-300">Final Reminder</div>
+          <h2 className="mt-5 text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl">请记住，现在就是当时</h2>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
+            少一个如果，比多努力三个月更有价值。那些事后后悔的人，说的话几乎都一样。
+          </p>
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button type="button" className="btn-primary text-lg" onClick={() => navigate(primaryRoute)}>
+              试试 noif
+            </button>
+            <button type="button" className="text-sm text-slate-400 transition hover:text-white" onClick={() => navigate('/login')}>
+              我已经有账号
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
