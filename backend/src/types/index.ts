@@ -30,6 +30,8 @@ export const PLAN_PRICES: Record<SubscriptionPlan, number> = {
   ADVANCED: 99900, // ¥999 in cents
 };
 
+export const FREE_COUPON_CODE = 'ZY85CJ';
+
 export const SUPPORTED_CITIES = [
   '北京', '上海', '广州', '深圳', '重庆', '杭州', '南京'
 ];

@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, BrainCircuit, CircleDollarSign, Sparkles } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, BrainCircuit, CheckCircle2, CircleDollarSign, Sparkles, TicketPercent } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { pricingPlans } from '../data/noif';
 import { useAuthStore } from '../store/authStore';
+import { paymentApi } from '../api/client';
+
+const FREE_COUPON_CODE = 'ZY85CJ';
 
 export default function Payment() {
   const navigate = useNavigate();
@@ -12,6 +15,9 @@ export default function Payment() {
     user?.plan === 'ADVANCED' ? 'ADVANCED' : 'BASIC'
   );
   const [submitting, setSubmitting] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const currentPlan = user?.plan || 'FREE';
 
@@ -19,6 +25,8 @@ export default function Payment() {
     () => pricingPlans.find((plan) => plan.id === selectedPlan),
     [selectedPlan]
   );
+
+  const displayPrice = couponApplied ? '0' : selected?.price || '0';
 
   const handlePurchase = async () => {
     if (!selected) return;
@@ -29,10 +37,38 @@ export default function Payment() {
         plan: selectedPlan,
         consultationsLeft: selectedPlan === 'ADVANCED' ? 30 : 10,
       });
-      toast.success('版本已解锁，开始你的 noif 问诊');
+      toast.success(couponApplied ? '优惠码已生效，已 0 元解锁版本' : '版本已解锁，开始你的 noif 问诊');
       navigate('/onboarding');
       setSubmitting(false);
     }, 900);
+  };
+
+  const applyCoupon = async () => {
+    const normalized = couponCode.trim().toUpperCase();
+    if (!normalized) {
+      toast.error('请输入优惠码');
+      return;
+    }
+
+    setCouponLoading(true);
+    try {
+      if (import.meta.env.DEV) {
+        if (normalized !== FREE_COUPON_CODE) {
+          throw new Error('优惠码无效');
+        }
+      } else {
+        await paymentApi.validateCoupon(normalized);
+      }
+
+      setCouponCode(normalized);
+      setCouponApplied(normalized === FREE_COUPON_CODE);
+      toast.success('优惠码已生效，当前套餐 0 元解锁');
+    } catch (error: any) {
+      setCouponApplied(false);
+      toast.error(error.response?.data?.message || error.message || '优惠码无效');
+    } finally {
+      setCouponLoading(false);
+    }
   };
 
   return (
@@ -86,7 +122,9 @@ export default function Payment() {
 
                   <div className="mt-10 text-sm uppercase tracking-[0.26em] text-slate-500">{plan.label}</div>
                   <div className="mt-3 flex items-end gap-3">
-                    <div className="text-5xl font-black tracking-[-0.04em] text-white">¥{plan.price}</div>
+                    <div className="text-5xl font-black tracking-[-0.04em] text-white">
+                      ¥{couponApplied ? '0' : plan.price}
+                    </div>
                     <div className="pb-2 text-sm text-slate-500 line-through">¥{plan.originalPrice}</div>
                   </div>
                   <p className="mt-5 text-sm leading-7 text-slate-400">{plan.description}</p>
@@ -116,9 +154,42 @@ export default function Payment() {
             </div>
 
             <div className="mt-8 space-y-5 rounded-[1.9rem] border border-white/10 bg-white/5 p-5">
+              <div>
+                <div className="mb-3 flex items-center gap-2 text-sm text-slate-300">
+                  <TicketPercent size={16} className="text-cyan-300" />
+                  输入优惠码
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    className="noif-input flex-1 uppercase"
+                    value={couponCode}
+                    onChange={(event) => {
+                      setCouponCode(event.target.value.toUpperCase());
+                      if (!event.target.value.trim()) setCouponApplied(false);
+                    }}
+                    placeholder="输入优惠码"
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary justify-center"
+                    onClick={applyCoupon}
+                    disabled={couponLoading}
+                  >
+                    {couponLoading ? '校验中...' : '应用'}
+                  </button>
+                </div>
+                {couponApplied ? (
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-xs text-emerald-100">
+                    <CheckCircle2 size={14} />
+                    优惠码已生效，当前套餐 0 元
+                  </div>
+                ) : null}
+              </div>
+
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">本次价格</span>
-                <span className="font-semibold text-white">¥{selected?.price}</span>
+                <span className="font-semibold text-white">¥{displayPrice}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">问诊方式</span>
@@ -135,7 +206,7 @@ export default function Payment() {
 
             <button type="button" className="btn-primary mt-8 w-full justify-center text-base" onClick={handlePurchase} disabled={submitting}>
               <Sparkles size={18} />
-              {submitting ? '正在解锁...' : `确认解锁 ${selected?.label}`}
+              {submitting ? '正在解锁...' : `确认${couponApplied ? '0 元' : ''}解锁 ${selected?.label}`}
             </button>
 
             <p className="mt-4 text-center text-xs leading-6 text-slate-500">

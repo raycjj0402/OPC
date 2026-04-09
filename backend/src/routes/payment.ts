@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../utils/prisma';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest, PLAN_PRICES } from '../types';
+import { AuthRequest, FREE_COUPON_CODE, PLAN_PRICES } from '../types';
 import { sendPaymentSuccess } from '../services/emailService';
 
 const router = Router();
@@ -44,9 +44,29 @@ router.get('/plans', async (_req, res) => {
   ]);
 });
 
+router.post('/validate-coupon', authenticate, async (req: AuthRequest, res: Response) => {
+  const { couponCode } = req.body;
+  const normalizedCode = String(couponCode || '').trim().toUpperCase();
+
+  if (!normalizedCode) {
+    return res.status(400).json({ message: '请输入优惠码' });
+  }
+
+  if (normalizedCode !== FREE_COUPON_CODE) {
+    return res.status(400).json({ message: '优惠码无效' });
+  }
+
+  res.json({
+    valid: true,
+    couponCode: normalizedCode,
+    discountType: 'FULL_DISCOUNT',
+    message: '优惠码已生效，当前套餐可 0 元解锁',
+  });
+});
+
 // POST /api/payment/create-order - 创建订单
 router.post('/create-order', authenticate, async (req: AuthRequest, res: Response) => {
-  const { plan, paymentMethod } = req.body;
+  const { plan, paymentMethod, couponCode } = req.body;
 
   if (!['BASIC', 'ADVANCED'].includes(plan)) {
     return res.status(400).json({ message: '无效的套餐类型' });
@@ -57,6 +77,8 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
 
   const userId = req.user!.userId;
   const subscription = await prisma.subscription.findUnique({ where: { userId } });
+  const normalizedCouponCode = String(couponCode || '').trim().toUpperCase();
+  const hasFreeCoupon = normalizedCouponCode === FREE_COUPON_CODE;
 
   if (!subscription) {
     return res.status(400).json({ message: '用户信息异常' });
@@ -74,6 +96,10 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
   if (subscription.plan === 'BASIC' && plan === 'ADVANCED') {
     orderType = 'UPGRADE';
     amount = 80000; // 补差价¥800
+  }
+
+  if (hasFreeCoupon) {
+    amount = 0;
   }
 
   const orderNo = `OPC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
@@ -99,6 +125,7 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
     amount: amount / 100,
     payUrl: mockPayUrl,
     qrCode: `mock_qr_${order.id}`, // 实际需生成二维码
+    couponApplied: hasFreeCoupon,
   });
 });
 
@@ -168,8 +195,10 @@ router.get('/order/:id', authenticate, async (req: AuthRequest, res: Response) =
 
 // POST /api/payment/upgrade - 套餐升级
 router.post('/upgrade', authenticate, async (req: AuthRequest, res: Response) => {
-  const { paymentMethod } = req.body;
+  const { paymentMethod, couponCode } = req.body;
   const userId = req.user!.userId;
+  const normalizedCouponCode = String(couponCode || '').trim().toUpperCase();
+  const hasFreeCoupon = normalizedCouponCode === FREE_COUPON_CODE;
 
   const subscription = await prisma.subscription.findUnique({ where: { userId } });
 
@@ -183,7 +212,7 @@ router.post('/upgrade', authenticate, async (req: AuthRequest, res: Response) =>
     data: {
       orderNo,
       subscriptionId: subscription.id,
-      amount: 80000, // ¥800
+      amount: hasFreeCoupon ? 0 : 80000, // ¥800 or ¥0
       plan: 'ADVANCED',
       orderType: 'UPGRADE',
       paymentMethod: paymentMethod || 'WECHAT',
@@ -191,13 +220,14 @@ router.post('/upgrade', authenticate, async (req: AuthRequest, res: Response) =>
     }
   });
 
-  const mockPayUrl = `${process.env.FRONTEND_URL}/payment/mock?orderId=${order.id}&amount=800`;
+  const mockPayUrl = `${process.env.FRONTEND_URL}/payment/mock?orderId=${order.id}&amount=${hasFreeCoupon ? 0 : 800}`;
 
   res.json({
     orderId: order.id,
     orderNo,
-    amount: 800,
+    amount: hasFreeCoupon ? 0 : 800,
     payUrl: mockPayUrl,
+    couponApplied: hasFreeCoupon,
   });
 });
 

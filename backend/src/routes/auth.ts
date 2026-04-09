@@ -1,64 +1,24 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
 import prisma from '../utils/prisma';
-import { sendVerificationCode } from '../services/emailService';
 import { AuthRequest } from '../types';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// POST /api/auth/send-code - 发送验证码
-router.post('/send-code', async (req: Request, res: Response) => {
-  const { email } = req.body;
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: '请输入有效的邮箱地址' });
-  }
-
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10分钟
-
-  await prisma.emailVerification.create({
-    data: { email, code, expiresAt }
-  });
-
-  const sent = await sendVerificationCode(email, code);
-  if (!sent) {
-    // 开发环境：返回验证码
-    if (process.env.NODE_ENV === 'development') {
-      return res.json({ message: '验证码已发送', devCode: code });
-    }
-    return res.status(500).json({ message: '验证码发送失败，请稍后重试' });
-  }
-
-  res.json({ message: '验证码已发送至邮箱，请查收' });
-});
-
 // POST /api/auth/register - 注册
 router.post('/register', async (req: Request, res: Response) => {
-  const { email, password, code, name } = req.body;
+  const { email, password } = req.body;
 
-  if (!email || !password || !code) {
+  if (!email || !password) {
     return res.status(400).json({ message: '请填写所有必填字段' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: '请输入有效的邮箱地址' });
   }
   if (password.length < 8) {
     return res.status(400).json({ message: '密码不能少于8位' });
-  }
-
-  // 验证验证码
-  const verification = await prisma.emailVerification.findFirst({
-    where: {
-      email,
-      code,
-      used: false,
-      expiresAt: { gt: new Date() }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  if (!verification) {
-    return res.status(400).json({ message: '验证码无效或已过期' });
   }
 
   // 检查邮箱是否已注册
@@ -73,17 +33,11 @@ router.post('/register', async (req: Request, res: Response) => {
     data: {
       email,
       passwordHash,
-      name: name || email.split('@')[0],
+      name: email.split('@')[0],
       subscription: {
         create: { plan: 'FREE' }
       }
     }
-  });
-
-  // 标记验证码已使用
-  await prisma.emailVerification.update({
-    where: { id: verification.id },
-    data: { used: true, userId: user.id }
   });
 
   const token = jwt.sign(
@@ -100,6 +54,8 @@ router.post('/register', async (req: Request, res: Response) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      plan: 'FREE',
+      onboardingCompleted: false,
     }
   });
 });

@@ -30,8 +30,7 @@ export default api;
 
 // Auth
 export const authApi = {
-  sendCode: (email: string) => api.post('/auth/send-code', { email }),
-  register: (data: { email: string; password: string; code: string; name?: string }) =>
+  register: (data: { email: string; password: string }) =>
     api.post('/auth/register', data),
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   me: () => api.get('/auth/me'),
@@ -43,12 +42,14 @@ export const authApi = {
 // Payment
 export const paymentApi = {
   getPlans: () => api.get('/payment/plans'),
-  createOrder: (plan: string, paymentMethod: string) =>
-    api.post('/payment/create-order', { plan, paymentMethod }),
+  validateCoupon: (couponCode: string) =>
+    api.post('/payment/validate-coupon', { couponCode }),
+  createOrder: (plan: string, paymentMethod: string, couponCode?: string) =>
+    api.post('/payment/create-order', { plan, paymentMethod, couponCode }),
   callback: (orderId: string, status: string) =>
     api.post('/payment/callback', { orderId, status }),
   getOrder: (id: string) => api.get(`/payment/order/${id}`),
-  upgrade: (paymentMethod: string) => api.post('/payment/upgrade', { paymentMethod }),
+  upgrade: (paymentMethod: string, couponCode?: string) => api.post('/payment/upgrade', { paymentMethod, couponCode }),
   requestInvoice: (data: { orderId: string; title: string; taxNo?: string; email: string }) =>
     api.post('/payment/invoice', data),
 };

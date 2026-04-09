@@ -52,7 +52,7 @@ function providerEnabled(provider: ChatModelProvider) {
 function providerDefaultModel(provider: ChatModelProvider) {
   if (provider === 'openai') return process.env.OPENAI_MODEL || 'gpt-4o-mini';
   if (provider === 'anthropic') return process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-  if (provider === 'kimi') return process.env.KIMI_MODEL || 'moonshot-v1-8k';
+  if (provider === 'kimi') return process.env.KIMI_MODEL || 'kimi-k2.5';
   return 'noif-socratic';
 }
 
