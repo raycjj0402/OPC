@@ -114,6 +114,7 @@ export default function Diagnosis() {
   const [draft, setDraft] = useState('');
   const [reportPending, setReportPending] = useState(inferReportReady(user?.diagnosisAnswers || []));
   const [initializing, setInitializing] = useState(false);
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [models, setModels] = useState<Array<{ id: string; label: string }>>([]);
@@ -155,7 +156,7 @@ export default function Diagnosis() {
   }, []);
 
   useEffect(() => {
-    if (!profile || !selectedModel || messages.length > 0 || initializing) {
+    if (!profile || !selectedModel || messages.length > 0 || initializing || bootstrapFailed) {
       return;
     }
 
@@ -163,6 +164,7 @@ export default function Diagnosis() {
 
     const bootstrapConversation = async () => {
       setInitializing(true);
+      setBootstrapFailed(false);
       try {
         const { data } = await chatApi.opening({
           profile,
@@ -190,6 +192,7 @@ export default function Diagnosis() {
         });
       } catch (error: any) {
         if (!cancelled) {
+          setBootstrapFailed(true);
           toast.error(error.response?.data?.message || '初始化对话失败');
         }
       } finally {
@@ -204,7 +207,7 @@ export default function Diagnosis() {
     return () => {
       cancelled = true;
     };
-  }, [answers, initializing, messages.length, profile, selectedModel, updateUser]);
+  }, [answers, bootstrapFailed, initializing, messages.length, profile, selectedModel, updateUser]);
 
   if (!profile) {
     return (
@@ -386,6 +389,23 @@ export default function Diagnosis() {
               <div className="max-w-3xl rounded-[1.8rem] border border-white/10 bg-white/[0.04] px-5 py-4">
                 <div className="text-[11px] uppercase tracking-[0.24em] text-cyan-300">noif</div>
                 <p className="mt-3 text-base leading-8 text-white">正在根据你的画像生成第一轮追问...</p>
+              </div>
+            </div>
+          ) : null}
+
+          {!initializing && bootstrapFailed ? (
+            <div className="flex gap-4">
+              <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-300/12 text-amber-200">
+                <Sparkles size={18} />
+              </div>
+              <div className="max-w-3xl rounded-[1.8rem] border border-amber-300/20 bg-amber-300/[0.08] px-5 py-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-amber-200">init failed</div>
+                <p className="mt-3 text-base leading-8 text-white">
+                  第一轮追问初始化失败了，通常是模型请求超时，或者联网搜索过慢。现在不会再无限重试了，你可以手动再试一次。
+                </p>
+                <button type="button" className="btn-secondary mt-4 justify-center" onClick={() => setBootstrapFailed(false)}>
+                  重新初始化
+                </button>
               </div>
             </div>
           ) : null}

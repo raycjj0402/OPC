@@ -1,5 +1,7 @@
 import { ChatSearchCitation } from '../types/chat';
 
+const DEFAULT_SEARCH_TIMEOUT_MS = Number(process.env.NOIF_WEB_SEARCH_TIMEOUT_MS || 5000);
+
 function decodeHtml(value: string) {
   return value
     .replace(/&amp;/g, '&')
@@ -58,15 +60,29 @@ export async function searchWeb(query: string, limit = 5) {
     return [];
   }
 
-  const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-    method: 'GET',
-    headers: {
-      'User-Agent':
-        process.env.NOIF_WEB_SEARCH_USER_AGENT ||
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml',
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_SEARCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        'User-Agent':
+          process.env.NOIF_WEB_SEARCH_USER_AGENT ||
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw new Error(`web search timed out after ${DEFAULT_SEARCH_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(`web search failed: ${response.status}`);

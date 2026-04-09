@@ -57,6 +57,7 @@ interface AssistantStreamHandlers {
 const DEFAULT_MODEL_ID = 'mock:noif-socratic';
 const DIMENSION_ORDER: DiagnosisDimension[] = ['customer', 'funding', 'market', 'execution', 'compliance'];
 const WEB_SEARCH_KEYWORDS = ['城市', '租金', '商圈', '政策', '法规', '合规', '市场', '竞品', '客户', '行业', '预算', '成本', '选址'];
+const MODEL_TIMEOUT_MS = Number(process.env.NOIF_MODEL_TIMEOUT_MS || 15000);
 
 function titleCaseProvider(provider: ChatModelProvider) {
   if (provider === 'openai') return 'ChatGPT';
@@ -261,10 +262,29 @@ function buildCoverageSummary(answers: DiagnosisAnswer[]) {
 
 function shouldUseWebSearch(input: AssistantGenerationInput) {
   if (!webSearchEnabled()) return false;
-  if (input.mode === 'opening') return true;
+  if (input.mode === 'opening') return false;
 
   const text = `${input.latestUserMessage || ''} ${input.profile.projectSummary || ''}`;
   return WEB_SEARCH_KEYWORDS.some((keyword) => text.includes(keyword));
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = MODEL_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw new Error(`model request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function buildSearchQueries(input: AssistantGenerationInput) {
@@ -411,7 +431,7 @@ async function requestOpenAiCompatibleCompletion(
 
   if (!apiKey) throw new Error(`${provider} API key is missing`);
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+  const response = await fetchWithTimeout(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -449,7 +469,7 @@ async function requestAnthropicCompletion(model: string, messages: LlmMessage[])
       content: message.content,
     }));
 
-  const response = await fetch(`${(process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '')}/v1/messages`, {
+  const response = await fetchWithTimeout(`${(process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '')}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
