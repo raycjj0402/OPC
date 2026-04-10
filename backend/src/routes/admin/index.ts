@@ -1,7 +1,13 @@
 import { Router, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../../utils/prisma';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
+import {
+  parseStoredDiagnosisAnswers,
+  parseStoredDiagnosisMessages,
+  parseStoredReports,
+} from '../../utils/userState';
 
 const router = Router();
 router.use(authenticate, requireAdmin);
@@ -156,6 +162,12 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
       lessonCount: u._count.lessonProgress,
       bookingCount: u._count.bookings,
       consultationsLeft: u.subscription?.consultationsLeft || 0,
+      reportCount: parseStoredReports(u.reports).length,
+      diagnosisMessageCount: parseStoredDiagnosisMessages(u.diagnosisMessages).length,
+      signupCity: u.signupCity,
+      lastLoginIp: u.lastLoginIp,
+      lastLoginCity: u.lastLoginCity,
+      lastLoginRegion: u.lastLoginRegion,
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt,
     })),
@@ -192,7 +204,12 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
   });
 
   if (!user) return res.status(404).json({ message: '用户不存在' });
-  res.json(user);
+  res.json({
+    ...user,
+    reports: parseStoredReports(user.reports),
+    diagnosisAnswers: parseStoredDiagnosisAnswers(user.diagnosisAnswers),
+    diagnosisMessages: parseStoredDiagnosisMessages(user.diagnosisMessages),
+  });
 });
 
 // PATCH /api/admin/users/:id/status - 修改用户状态
@@ -204,6 +221,27 @@ router.patch('/users/:id/status', async (req: AuthRequest, res: Response) => {
 
   await prisma.user.update({ where: { id: req.params.id }, data: { status } });
   res.json({ message: '状态已更新' });
+});
+
+// POST /api/admin/users/:id/reset-password - 管理员重置用户密码
+router.post('/users/:id/reset-password', async (req: AuthRequest, res: Response) => {
+  const { newPassword } = req.body;
+
+  if (!newPassword || String(newPassword).length < 8) {
+    return res.status(400).json({ message: '新密码不能少于 8 位' });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) {
+    return res.status(404).json({ message: '用户不存在' });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(String(newPassword), 12) },
+  });
+
+  res.json({ message: '密码已重置' });
 });
 
 // GET /api/admin/orders - 订单列表

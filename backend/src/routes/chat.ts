@@ -1,9 +1,16 @@
 import { Router, Response } from 'express';
+import prisma from '../utils/prisma';
 import { authenticate, requireSubscription } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { buildReport } from '../services/noifDiagnosisService';
-import { generateAssistantTurn, getAvailableChatModels, streamAssistantTurn } from '../services/chatModelService';
+import { generateAssistantTurn, getAvailableChatModels, resolveChatModelConfig, streamAssistantTurn } from '../services/chatModelService';
 import { ChatConversationMessage, DiagnosisAnswer, NoifOnboardingProfile } from '../types/chat';
+import {
+  asJsonValue,
+  buildStoredReports,
+  parseStoredDiagnosisAnswers,
+  parseStoredDiagnosisMessages,
+} from '../utils/userState';
 
 const router = Router();
 
@@ -47,6 +54,20 @@ function mergeAnswers(existing: DiagnosisAnswer[], nextAnswer: DiagnosisAnswer |
   return [...existing, nextAnswer];
 }
 
+async function persistDiagnosisState(
+  userId: string,
+  messages: ChatConversationMessage[],
+  answers: DiagnosisAnswer[]
+) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      diagnosisMessages: asJsonValue(messages),
+      diagnosisAnswers: asJsonValue(answers),
+    },
+  });
+}
+
 function writeSse(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -77,6 +98,19 @@ router.post('/opening', async (req: AuthRequest, res: Response) => {
     answers: Array.isArray(answers) ? answers : [],
     mode: 'opening',
   });
+
+  const openingMessages = [
+    {
+      id: `assistant_${Date.now()}`,
+      role: 'assistant' as const,
+      content: assistant.assistantMessage,
+      createdAt: new Date().toISOString(),
+      quickReplies: assistant.quickReplies,
+      citations: assistant.citations,
+      modelLabel: assistant.model.label,
+    },
+  ];
+  await persistDiagnosisState(req.user!.userId, openingMessages, Array.isArray(answers) ? answers : []);
 
   res.json({
     reportReady: assistant.reportReady,
@@ -124,6 +158,19 @@ router.post('/respond', async (req: AuthRequest, res: Response) => {
   });
 
   const updatedAnswers = mergeAnswers(Array.isArray(answers) ? answers : [], assistant.normalizedAnswer);
+  const updatedMessages = [
+    ...normalizeConversation(conversation),
+    {
+      id: `assistant_${Date.now()}`,
+      role: 'assistant' as const,
+      content: assistant.assistantMessage,
+      createdAt: new Date().toISOString(),
+      quickReplies: assistant.quickReplies,
+      citations: assistant.citations,
+      modelLabel: assistant.model.label,
+    },
+  ];
+  await persistDiagnosisState(req.user!.userId, updatedMessages, updatedAnswers);
 
   res.json({
     reportReady: assistant.reportReady,
@@ -164,12 +211,17 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
 
   const normalizedConversation = normalizeConversation(conversation);
   const existingAnswers = Array.isArray(answers) ? answers : [];
+  const selectedModel = resolveChatModelConfig(modelId);
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
+  writeSse(res, 'start', {
+    model: selectedModel,
+    reportReady: false,
+  });
 
   try {
     await streamAssistantTurn(
@@ -182,6 +234,9 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
         mode: 'reply',
       },
       {
+        onStatus: async (payload) => {
+          writeSse(res, 'status', payload);
+        },
         onStart: async (result) => {
           const updatedAnswers = mergeAnswers(existingAnswers, result.normalizedAnswer);
           writeSse(res, 'ack', {
@@ -189,16 +244,25 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
             normalizedAnswer: result.normalizedAnswer,
             answers: updatedAnswers,
           });
-          writeSse(res, 'start', {
-            model: result.model,
-            reportReady: result.reportReady,
-          });
         },
         onChunk: async (chunk) => {
           writeSse(res, 'delta', { content: chunk });
         },
         onComplete: async (result) => {
           const updatedAnswers = mergeAnswers(existingAnswers, result.normalizedAnswer);
+          const updatedMessages = [
+            ...normalizedConversation,
+            {
+              id: `assistant_${Date.now()}`,
+              role: 'assistant' as const,
+              content: result.assistantMessage,
+              createdAt: new Date().toISOString(),
+              quickReplies: result.quickReplies,
+              citations: result.citations,
+              modelLabel: result.model.label,
+            },
+          ];
+          await persistDiagnosisState(req.user!.userId, updatedMessages, updatedAnswers);
           writeSse(res, 'meta', {
             assistantMessage: result.assistantMessage,
             quickReplies: result.quickReplies,
@@ -243,6 +307,20 @@ router.post('/report', async (req: AuthRequest, res: Response) => {
   }
 
   const report = buildReport(profile!, answers);
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    select: { reports: true, diagnosisAnswers: true, diagnosisMessages: true },
+  });
+
+  await prisma.user.update({
+    where: { id: req.user!.userId },
+    data: {
+      reports: asJsonValue(buildStoredReports(user?.reports, report)),
+      diagnosisAnswers: asJsonValue(parseStoredDiagnosisAnswers(user?.diagnosisAnswers)),
+      diagnosisMessages: asJsonValue(parseStoredDiagnosisMessages(user?.diagnosisMessages)),
+    },
+  });
+
   res.json({ report });
 });
 

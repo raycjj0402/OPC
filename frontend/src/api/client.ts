@@ -217,6 +217,8 @@ export const adminApi = {
   getUser: (id: string) => api.get(`/admin/users/${id}`),
   updateUserStatus: (id: string, status: string) =>
     api.patch(`/admin/users/${id}/status`, { status }),
+  resetUserPassword: (id: string, newPassword: string) =>
+    api.post(`/admin/users/${id}/reset-password`, { newPassword }),
   getOrders: (params?: Record<string, string>) => api.get('/admin/orders', { params }),
   refundOrder: (id: string, reason: string) =>
     api.post(`/admin/orders/${id}/refund`, { reason }),

@@ -29,7 +29,8 @@ export default function Login() {
         setAuth(buildDemoToken(email), demoUser);
         toast.success('登录成功');
 
-        if (demoUser.plan === 'FREE') navigate('/payment');
+        if (demoUser.role === 'ADMIN' || demoUser.role === 'OPERATOR') navigate('/admin/dashboard');
+        else if (demoUser.plan === 'FREE') navigate('/payment');
         else if (!demoUser.onboardingCompleted) navigate('/onboarding');
         else navigate('/dashboard');
         return;
@@ -39,7 +40,8 @@ export default function Login() {
       setAuth(data.token, data.user);
       toast.success('欢迎回来');
 
-      if (data.user.plan === 'FREE') navigate('/payment');
+      if (data.user.role === 'ADMIN' || data.user.role === 'OPERATOR') navigate('/admin/dashboard');
+      else if (data.user.plan === 'FREE') navigate('/payment');
       else if (!data.user.onboardingCompleted) navigate('/onboarding');
       else navigate('/dashboard');
     } catch (error: any) {

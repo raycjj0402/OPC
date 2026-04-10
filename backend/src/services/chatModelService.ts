@@ -49,6 +49,7 @@ interface AssistantGenerationResult {
 }
 
 interface AssistantStreamHandlers {
+  onStatus?: (payload: { phase: 'searching' | 'thinking' | 'composing'; label: string; model: ChatModelConfig }) => Promise<void> | void;
   onStart?: (result: AssistantGenerationResult) => Promise<void> | void;
   onChunk: (chunk: string) => Promise<void> | void;
   onComplete?: (result: AssistantGenerationResult) => Promise<void> | void;
@@ -56,11 +57,12 @@ interface AssistantStreamHandlers {
 
 const DEFAULT_MODEL_ID = 'mock:noif-socratic';
 const DIMENSION_ORDER: DiagnosisDimension[] = ['customer', 'funding', 'market', 'execution', 'compliance'];
-const WEB_SEARCH_KEYWORDS = ['城市', '租金', '商圈', '政策', '法规', '合规', '市场', '竞品', '客户', '行业', '预算', '成本', '选址'];
+const WEB_SEARCH_KEYWORDS = ['城市', '租金', '商圈', '政策', '法规', '合规', '市场数据', '竞品', '行业数据', '客流', '选址', '搜索', '联网', '查一下', '最新'];
 const MODEL_TIMEOUT_MS = Number(process.env.NOIF_MODEL_TIMEOUT_MS || 15000);
 const KIMI_MODEL_TIMEOUT_MS = Number(process.env.NOIF_KIMI_MODEL_TIMEOUT_MS || process.env.NOIF_MODEL_TIMEOUT_MS_KIMI || 45000);
 const DEFAULT_COMPLETION_TEMPERATURE = 0.35;
 const DEFAULT_COMPLETION_MAX_TOKENS = 900;
+const STREAM_CHUNK_DELAY_MS = Number(process.env.NOIF_STREAM_CHUNK_DELAY_MS || 28);
 const DIMENSION_KEYWORDS: Record<DiagnosisDimension, string[]> = {
   customer: ['客户', '付费', '下单', '复购', '获客', '成交', '转化', '渠道', '名单'],
   funding: ['现金流', '止损', '预算', '资金', '回本', '成本', '亏损', '毛利', '租金'],
@@ -152,6 +154,10 @@ function getModelConfig(modelId?: string): ChatModelConfig {
     enabled: true,
     isDefault: true,
   };
+}
+
+export function resolveChatModelConfig(modelId?: string) {
+  return getModelConfig(modelId);
 }
 
 function summarizeCoverage(answers: DiagnosisAnswer[]) {
@@ -351,7 +357,10 @@ function shouldUseWebSearch(input: AssistantGenerationInput) {
   if (input.mode === 'opening') return false;
 
   const text = `${input.latestUserMessage || ''} ${input.profile.projectSummary || ''}`;
-  return WEB_SEARCH_KEYWORDS.some((keyword) => text.includes(keyword));
+  const explicitSearchRequest =
+    /联网|搜索|查一下|帮我查|最新|最近|数据|政策|法规|租金|商圈|客流|竞品|选址/.test(text);
+
+  return explicitSearchRequest && WEB_SEARCH_KEYWORDS.some((keyword) => text.includes(keyword));
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = MODEL_TIMEOUT_MS) {
@@ -410,7 +419,7 @@ function buildSearchQueries(input: AssistantGenerationInput) {
     }
   }
 
-  return [...new Set(queries.map((item) => item.trim()).filter(Boolean))].slice(0, 2);
+  return [...new Set(queries.map((item) => item.trim()).filter(Boolean))].slice(0, 1);
 }
 
 async function collectWebContext(input: AssistantGenerationInput) {
@@ -419,16 +428,17 @@ async function collectWebContext(input: AssistantGenerationInput) {
   }
 
   const queries = buildSearchQueries(input);
-  const aggregated: ChatSearchCitation[] = [];
-
-  for (const query of queries) {
-    try {
-      const results = await searchWeb(query, 3);
-      aggregated.push(...results);
-    } catch (error) {
-      console.error('[web-search] query failed:', query, error);
-    }
-  }
+  const results = await Promise.all(
+    queries.map(async (query) => {
+      try {
+        return await searchWeb(query, 3);
+      } catch (error) {
+        console.error('[web-search] query failed:', query, error);
+        return [] as ChatSearchCitation[];
+      }
+    })
+  );
+  const aggregated = results.flat();
 
   const unique = aggregated.filter((item, index, array) => array.findIndex((candidate) => candidate.url === item.url) === index);
   return {
@@ -534,7 +544,7 @@ function getOpenAiCompatibleTemperature(provider: 'openai' | 'kimi', model: stri
 
 function getOpenAiCompatibleMaxTokens(provider: 'openai' | 'kimi', model: string) {
   if (provider === 'kimi' && model.startsWith('kimi-k2.5')) {
-    return 1400;
+    return 900;
   }
 
   return DEFAULT_COMPLETION_MAX_TOKENS;
@@ -747,19 +757,44 @@ function splitIntoStreamChunks(text: string) {
   return fallbackChunks;
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function streamAssistantTurn(
   input: AssistantGenerationInput,
   handlers: AssistantStreamHandlers
 ) {
+  const model = getModelConfig(input.modelId);
+
+  if (handlers.onStatus) {
+    await handlers.onStatus({
+      phase: shouldUseWebSearch(input) ? 'searching' : 'thinking',
+      label: shouldUseWebSearch(input) ? '正在联网搜索相关信息...' : '正在整理你的画像和上下文...',
+      model,
+    });
+  }
+
   const result = await generateAssistantTurn(input);
 
   if (handlers.onStart) {
     await handlers.onStart(result);
   }
 
+  if (handlers.onStatus) {
+    await handlers.onStatus({
+      phase: 'composing',
+      label: '正在组织这一轮回答...',
+      model: result.model,
+    });
+  }
+
   const chunks = splitIntoStreamChunks(result.assistantMessage);
   for (const chunk of chunks) {
     await handlers.onChunk(chunk);
+    if (STREAM_CHUNK_DELAY_MS > 0) {
+      await delay(STREAM_CHUNK_DELAY_MS);
+    }
   }
 
   if (handlers.onComplete) {

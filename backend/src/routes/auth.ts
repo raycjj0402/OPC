@@ -4,6 +4,13 @@ import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { authenticate } from '../middleware/auth';
+import { resolveRequestLocation } from '../services/requestContextService';
+import {
+  asJsonValue,
+  parseStoredDiagnosisAnswers,
+  parseStoredDiagnosisMessages,
+  parseStoredReports,
+} from '../utils/userState';
 
 const router = Router();
 
@@ -28,12 +35,23 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const requestLocation = await resolveRequestLocation(req);
 
   const user = await prisma.user.create({
     data: {
       email,
       passwordHash,
       name: email.split('@')[0],
+      signupIp: requestLocation.ip || null,
+      signupCity: requestLocation.city || null,
+      signupRegion: requestLocation.region || null,
+      lastLoginAt: new Date(),
+      lastLoginIp: requestLocation.ip || null,
+      lastLoginCity: requestLocation.city || null,
+      lastLoginRegion: requestLocation.region || null,
+      reports: asJsonValue([]),
+      diagnosisAnswers: asJsonValue([]),
+      diagnosisMessages: asJsonValue([]),
       subscription: {
         create: { plan: 'FREE' }
       }
@@ -56,6 +74,13 @@ router.post('/register', async (req: Request, res: Response) => {
       role: user.role,
       plan: 'FREE',
       onboardingCompleted: false,
+      reports: [],
+      diagnosisAnswers: [],
+      diagnosisMessages: [],
+      signupCity: user.signupCity,
+      signupRegion: user.signupRegion,
+      lastLoginCity: user.lastLoginCity,
+      lastLoginRegion: user.lastLoginRegion,
     }
   });
 });
@@ -81,9 +106,15 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.status(403).json({ message: '账号已被封禁，请联系客服' });
   }
 
+  const requestLocation = await resolveRequestLocation(req);
   await prisma.user.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date() }
+    data: {
+      lastLoginAt: new Date(),
+      lastLoginIp: requestLocation.ip || null,
+      lastLoginCity: requestLocation.city || null,
+      lastLoginRegion: requestLocation.region || null,
+    }
   });
 
   const token = jwt.sign(
@@ -102,6 +133,13 @@ router.post('/login', async (req: Request, res: Response) => {
       role: user.role,
       plan: user.subscription?.plan || 'FREE',
       onboardingCompleted: false,
+      reports: parseStoredReports(user.reports),
+      diagnosisAnswers: parseStoredDiagnosisAnswers(user.diagnosisAnswers),
+      diagnosisMessages: parseStoredDiagnosisMessages(user.diagnosisMessages),
+      signupCity: user.signupCity,
+      signupRegion: user.signupRegion,
+      lastLoginCity: requestLocation.city || user.lastLoginCity,
+      lastLoginRegion: requestLocation.region || user.lastLoginRegion,
     }
   });
 });
@@ -129,6 +167,15 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     consultationsLeft: user.subscription?.consultationsLeft || 0,
     onboardingCompleted: !!user.onboarding?.completedAt,
     onboarding: user.onboarding,
+    reports: parseStoredReports(user.reports),
+    diagnosisAnswers: parseStoredDiagnosisAnswers(user.diagnosisAnswers),
+    diagnosisMessages: parseStoredDiagnosisMessages(user.diagnosisMessages),
+    signupIp: user.signupIp,
+    signupCity: user.signupCity,
+    signupRegion: user.signupRegion,
+    lastLoginIp: user.lastLoginIp,
+    lastLoginCity: user.lastLoginCity,
+    lastLoginRegion: user.lastLoginRegion,
     createdAt: user.createdAt,
   });
 });

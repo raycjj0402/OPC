@@ -26,10 +26,12 @@ function inferReportReady(answers: DiagnosisAnswer[]) {
 function AssistantBubble({
   message,
   isStreaming,
+  streamStatusLabel,
   onQuickReply,
 }: {
   message: DiagnosisMessage;
   isStreaming?: boolean;
+  streamStatusLabel?: string;
   onQuickReply: (value: string) => void;
 }) {
   return (
@@ -50,8 +52,19 @@ function AssistantBubble({
         </div>
 
         <p className="mt-3 whitespace-pre-wrap text-base leading-8 text-white">
-          {message.content || (isStreaming ? '正在思考...' : '')}
+          {message.content || (isStreaming ? streamStatusLabel || '正在思考...' : '')}
         </p>
+
+        {isStreaming && !message.content ? (
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs text-cyan-100">
+            <span className="flex gap-1">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-200 [animation-delay:-0.2s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-200 [animation-delay:-0.1s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-200" />
+            </span>
+            <span>{streamStatusLabel || '正在生成回答...'}</span>
+          </div>
+        ) : null}
 
         {message.citations?.length ? (
           <div className="mt-4 space-y-2">
@@ -117,6 +130,7 @@ export default function Diagnosis() {
   const [bootstrapFailed, setBootstrapFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [streamStatusLabel, setStreamStatusLabel] = useState('');
   const [models, setModels] = useState<Array<{ id: string; label: string }>>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
 
@@ -124,6 +138,11 @@ export default function Diagnosis() {
     if (!profile) return '';
     return profile.projectSummary || `${profile.city}${profile.industry}项目`;
   }, [profile]);
+
+  const selectedModelLabel = useMemo(
+    () => models.find((item) => item.id === selectedModel)?.label || '',
+    [models, selectedModel]
+  );
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -249,11 +268,13 @@ export default function Diagnosis() {
       createdAt: new Date().toISOString(),
       quickReplies: [],
       citations: [],
+      modelLabel: selectedModelLabel,
     };
 
     const baseConversation = [...messages, userMessage];
     setDraft('');
     setSending(true);
+    setStreamStatusLabel('正在读取你的画像与历史对话...');
     setMessages([...baseConversation, pendingAssistantMessage]);
 
     let streamedText = '';
@@ -282,6 +303,20 @@ export default function Diagnosis() {
             );
           },
           onEvent: (event, payload) => {
+            if (event === 'start') {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantMessageId
+                    ? { ...message, modelLabel: payload.model?.label || selectedModelLabel }
+                    : message
+                )
+              );
+            }
+
+            if (event === 'status') {
+              setStreamStatusLabel(payload.label || '正在思考...');
+            }
+
             if (event === 'ack') {
               nextAnswers = payload.answers || answers;
               nextReportReady = Boolean(payload.reportReady);
@@ -311,6 +346,7 @@ export default function Diagnosis() {
       toast.error(error.response?.data?.message || error.message || '发送失败，请稍后重试');
     } finally {
       setSending(false);
+      setStreamStatusLabel('');
     }
   };
 
@@ -416,6 +452,7 @@ export default function Diagnosis() {
                 key={message.id}
                 message={message}
                 isStreaming={sending && index === messages.length - 1 && !message.content}
+                streamStatusLabel={sending && index === messages.length - 1 && !message.content ? streamStatusLabel : undefined}
                 onQuickReply={handleSubmit}
               />
             ) : (

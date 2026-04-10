@@ -9,4 +9,7 @@ export PORT="${PORT:-4000}"
 
 echo "=== OPC Starting on port $PORT ==="
 
+echo "=== Applying Prisma schema ==="
+npx prisma db push
+
 exec node dist/server.js

@@ -17,6 +17,15 @@ model User {
   avatarUrl       String?
   role            UserRole  @default(USER)
   status          UserStatus @default(ACTIVE)
+  signupIp        String?
+  signupCity      String?
+  signupRegion    String?
+  lastLoginIp     String?
+  lastLoginCity   String?
+  lastLoginRegion String?
+  reports         Json?
+  diagnosisAnswers Json?
+  diagnosisMessages Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   lastLoginAt     DateTime?

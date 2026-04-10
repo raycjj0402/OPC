@@ -19,6 +19,12 @@ export interface User {
   reports?: NoifReport[];
   diagnosisAnswers?: DiagnosisAnswer[];
   diagnosisMessages?: DiagnosisMessage[];
+  signupIp?: string | null;
+  signupCity?: string | null;
+  signupRegion?: string | null;
+  lastLoginIp?: string | null;
+  lastLoginCity?: string | null;
+  lastLoginRegion?: string | null;
 }
 
 interface AuthState {

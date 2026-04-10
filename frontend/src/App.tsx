@@ -12,6 +12,11 @@ import ProfilePage from './pages/Profile';
 import Register from './pages/Register';
 import { useAuthStore } from './store/authStore';
 import CaseLibrary from './pages/CaseLibrary';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/Dashboard';
+import AdminUsers from './pages/admin/Users';
+import AdminOrders from './pages/admin/Orders';
+import AdminBookings from './pages/admin/Bookings';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -31,6 +36,13 @@ function RequireOnboarding({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.plan === 'FREE') return <Navigate to="/payment" replace />;
   if (!user?.onboardingCompleted) return <Navigate to="/onboarding" replace />;
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== 'ADMIN' && user?.role !== 'OPERATOR') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -100,6 +112,21 @@ export default function App() {
             }
           />
           <Route path="profile" element={<ProfilePage />} />
+        </Route>
+
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminLayout />
+            </RequireAdmin>
+          }
+        >
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="bookings" element={<AdminBookings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

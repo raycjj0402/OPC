@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Download, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Eye, KeyRound, MapPin, MessageSquare, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../api/client';
 import dayjs from 'dayjs';
@@ -28,6 +28,7 @@ export default function AdminUsers() {
   const [keyword, setKeyword] = useState('');
   const [plan, setPlan] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [resetPassword, setResetPassword] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', page, keyword, plan],
@@ -53,6 +54,16 @@ export default function AdminUsers() {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
     },
     onError: () => toast.error('操作失败'),
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: ({ id, newPassword }: { id: string; newPassword: string }) =>
+      adminApi.resetUserPassword(id, newPassword),
+    onSuccess: () => {
+      toast.success('密码已重置');
+      setResetPassword('');
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || '密码重置失败'),
   });
 
   return (
@@ -94,7 +105,7 @@ export default function AdminUsers() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                {['邮箱', '名称', '套餐', '城市', '行业', '课时数', '注册时间', '状态', '操作'].map(h => (
+                {['邮箱', '套餐', '当前城市', '最近登录城市', '报告', '对话', '注册时间', '状态', '操作'].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">
                     {h}
                   </th>
@@ -117,19 +128,15 @@ export default function AdminUsers() {
                   <td className="px-4 py-3 text-gray-900 font-medium max-w-[200px] truncate">
                     {user.email}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    {user.name || '-'}
-                  </td>
                   <td className="px-4 py-3">
                     <span className={`badge ${PLAN_COLORS[user.plan]}`}>
                       {PLAN_LABELS[user.plan]}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{user.city || '-'}</td>
-                  <td className="px-4 py-3 text-gray-600 max-w-[120px] truncate">
-                    {user.industries?.join('、') || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-center">{user.lessonCount}</td>
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{user.lastLoginCity || '-'}</td>
+                  <td className="px-4 py-3 text-gray-600 text-center">{user.reportCount ?? 0}</td>
+                  <td className="px-4 py-3 text-gray-600 text-center">{user.diagnosisMessageCount ?? 0}</td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                     {dayjs(user.createdAt).format('MM/DD HH:mm')}
                   </td>
@@ -216,12 +223,46 @@ export default function AdminUsers() {
                   { label: '最近登录', value: userDetail.lastLoginAt ? dayjs(userDetail.lastLoginAt).format('MM/DD HH:mm') : '-' },
                   { label: '城市', value: userDetail.onboarding?.city || '-' },
                   { label: '行业', value: userDetail.onboarding?.industries?.join('、') || '-' },
+                  { label: '注册 IP', value: userDetail.signupIp || '-' },
+                  { label: '注册地域', value: [userDetail.signupRegion, userDetail.signupCity].filter(Boolean).join(' / ') || '-' },
+                  { label: '最近登录 IP', value: userDetail.lastLoginIp || '-' },
+                  { label: '最近登录地域', value: [userDetail.lastLoginRegion, userDetail.lastLoginCity].filter(Boolean).join(' / ') || '-' },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-gray-50 rounded-xl p-3">
                     <p className="text-gray-500 text-xs mb-0.5">{label}</p>
                     <p className="font-medium text-gray-900">{value}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 p-4">
+                <div className="flex items-center gap-2 text-gray-900 font-bold">
+                  <KeyRound size={16} />
+                  管理员重置密码
+                </div>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={resetPassword}
+                    onChange={(event) => setResetPassword(event.target.value)}
+                    placeholder="输入新的登录密码，至少 8 位"
+                    className="input text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!resetPassword || resetPassword.length < 8) {
+                        toast.error('新密码至少 8 位');
+                        return;
+                      }
+                      passwordMutation.mutate({ id: userDetail.id, newPassword: resetPassword });
+                    }}
+                    className="btn-primary whitespace-nowrap justify-center"
+                    disabled={passwordMutation.isPending}
+                  >
+                    {passwordMutation.isPending ? '重置中...' : '重置密码'}
+                  </button>
+                </div>
               </div>
 
               {/* Orders */}
@@ -246,6 +287,86 @@ export default function AdminUsers() {
                   </div>
                 </div>
               )}
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 font-bold text-gray-900">
+                  <FileText size={16} />
+                  风险报告
+                </div>
+                {userDetail.reports?.length > 0 ? (
+                  <div className="space-y-3">
+                    {userDetail.reports.map((report: any) => (
+                      <div key={report.id} className="rounded-2xl border border-gray-200 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold text-gray-900">{report.projectName}</div>
+                          <div className="text-xs text-gray-500">{dayjs(report.createdAt).format('YYYY/MM/DD HH:mm')}</div>
+                        </div>
+                        <div className="mt-2 text-sm text-gray-600">城市：{report.city || '-'}</div>
+                        <div className="mt-2 text-sm font-medium text-purple-700">准备度评分：{report.readinessScore}</div>
+                        <p className="mt-3 text-sm leading-6 text-gray-700">{report.summary}</p>
+                        {report.topWarnings?.length > 0 ? (
+                          <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+                            {report.topWarnings.join('；')}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">还没有已保存的风险报告</div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 font-bold text-gray-900">
+                  <MessageSquare size={16} />
+                  问诊对话记录
+                </div>
+                {userDetail.diagnosisMessages?.length > 0 ? (
+                  <div className="space-y-3 rounded-2xl border border-gray-200 p-4">
+                    {userDetail.diagnosisMessages.map((message: any) => (
+                      <div
+                        key={message.id}
+                        className={`rounded-2xl px-4 py-3 ${
+                          message.role === 'assistant' ? 'bg-slate-50 text-slate-800' : 'bg-cyan-50 text-cyan-950'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em]">
+                          <span>{message.role === 'assistant' ? 'AI' : '用户'}</span>
+                          {message.modelLabel ? <span className="text-gray-400">{message.modelLabel}</span> : null}
+                          {message.createdAt ? <span className="text-gray-400">{dayjs(message.createdAt).format('MM/DD HH:mm')}</span> : null}
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap text-sm leading-7">{message.content}</div>
+                        {message.quickReplies?.length > 0 ? (
+                          <div className="mt-2 text-xs text-gray-500">快捷建议：{message.quickReplies.join(' / ')}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">还没有已保存的问诊记录</div>
+                )}
+              </div>
+
+              {userDetail.diagnosisAnswers?.length > 0 ? (
+                <div>
+                  <div className="mb-2 flex items-center gap-2 font-bold text-gray-900">
+                    <MapPin size={16} />
+                    风险答案快照
+                  </div>
+                  <div className="space-y-2">
+                    {userDetail.diagnosisAnswers.map((answer: any, index: number) => (
+                      <div key={`${answer.questionId}_${index}`} className="rounded-xl bg-gray-50 p-3">
+                        <div className="text-xs text-gray-500">
+                          维度：{answer.dimension} · 分数：{answer.score}
+                        </div>
+                        <div className="mt-1 text-sm text-gray-800">{answer.answer}</div>
+                        <div className="mt-1 text-xs text-gray-500">{answer.insight}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Recent progress */}
               {userDetail.lessonProgress?.length > 0 && (
