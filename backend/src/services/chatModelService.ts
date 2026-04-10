@@ -58,6 +58,7 @@ const DEFAULT_MODEL_ID = 'mock:noif-socratic';
 const DIMENSION_ORDER: DiagnosisDimension[] = ['customer', 'funding', 'market', 'execution', 'compliance'];
 const WEB_SEARCH_KEYWORDS = ['城市', '租金', '商圈', '政策', '法规', '合规', '市场', '竞品', '客户', '行业', '预算', '成本', '选址'];
 const MODEL_TIMEOUT_MS = Number(process.env.NOIF_MODEL_TIMEOUT_MS || 15000);
+const KIMI_MODEL_TIMEOUT_MS = Number(process.env.NOIF_KIMI_MODEL_TIMEOUT_MS || process.env.NOIF_MODEL_TIMEOUT_MS_KIMI || 45000);
 const DEFAULT_COMPLETION_TEMPERATURE = 0.35;
 const DEFAULT_COMPLETION_MAX_TOKENS = 900;
 const DIMENSION_KEYWORDS: Record<DiagnosisDimension, string[]> = {
@@ -372,6 +373,22 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = MODE
   }
 }
 
+function getModelTimeoutMs(provider: 'openai' | 'kimi' | 'anthropic', model: string) {
+  if (provider === 'kimi' && model.startsWith('kimi-k2.5')) {
+    return KIMI_MODEL_TIMEOUT_MS;
+  }
+
+  return MODEL_TIMEOUT_MS;
+}
+
+function getConfiguredModelTimeoutMs(model: ChatModelConfig) {
+  if (model.provider === 'mock') {
+    return 0;
+  }
+
+  return getModelTimeoutMs(model.provider, model.model);
+}
+
 function buildSearchQueries(input: AssistantGenerationInput) {
   const queries: string[] = [];
   const projectName = input.profile.projectSummary || `${input.profile.city}${input.profile.industry}项目`;
@@ -559,20 +576,24 @@ async function requestOpenAiCompatibleCompletion(
 
   if (!apiKey) throw new Error(`${provider} API key is missing`);
 
-  const response = await fetchWithTimeout(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+  const response = await fetchWithTimeout(
+    `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: getOpenAiCompatibleTemperature(provider, model),
+        max_tokens: getOpenAiCompatibleMaxTokens(provider, model),
+        messages,
+        response_format: { type: 'json_object' },
+      }),
     },
-    body: JSON.stringify({
-      model,
-      temperature: getOpenAiCompatibleTemperature(provider, model),
-      max_tokens: getOpenAiCompatibleMaxTokens(provider, model),
-      messages,
-      response_format: { type: 'json_object' },
-    }),
-  });
+    getModelTimeoutMs(provider, model)
+  );
 
   if (!response.ok) {
     throw new Error(`${provider} chat completion failed: ${response.status} ${await response.text()}`);
@@ -692,7 +713,12 @@ export async function generateAssistantTurn(input: AssistantGenerationInput): Pr
       searchQueries: webContext.searchQueries,
     };
   } catch (error) {
-    console.error('[chat-model] falling back to mock response:', error);
+    console.error('[chat-model] falling back to mock response:', {
+      provider: model.provider,
+      model: model.model,
+      timeoutMs: getConfiguredModelTimeoutMs(model),
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {
       model,
       assistantMessage: fallbackMessage,
