@@ -97,8 +97,8 @@ model Subscription {
 
 enum SubscriptionPlan {
   FREE
-  BASIC     // ¥199
-  ADVANCED  // ¥999
+  BASIC     // ¥49.99
+  ADVANCED  // ¥99.99
 }
 
 model Order {

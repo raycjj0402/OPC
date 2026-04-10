@@ -27,7 +27,7 @@ export default function Login() {
       if (isDemoMode) {
         const demoUser = buildDemoUser(email, null, user);
         setAuth(buildDemoToken(email), demoUser);
-        toast.success('演示模式登录成功');
+        toast.success('登录成功');
 
         if (demoUser.plan === 'FREE') navigate('/payment');
         else if (!demoUser.onboardingCompleted) navigate('/onboarding');
@@ -74,7 +74,7 @@ export default function Login() {
             <p className="mt-3 text-base leading-8 text-slate-400">继续你的问诊、报告与案例库浏览。</p>
             {isDemoMode ? (
               <div className="mt-5 inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/8 px-4 py-2 text-xs tracking-[0.14em] text-cyan-100">
-                演示模式：任意邮箱和密码都可直接进入
+                当前本地环境可直接进入，便于继续调试完整流程
               </div>
             ) : null}
           </div>

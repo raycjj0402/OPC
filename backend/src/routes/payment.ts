@@ -48,7 +48,7 @@ function resolveGatewayMerchantConfig() {
   return {
     pid: process.env.PAYMENT_MERCHANT_ID || '',
     key: process.env.PAYMENT_MERCHANT_KEY || '',
-    siteName: process.env.PAYMENT_SITE_NAME || 'noif',
+    siteName: process.env.PAYMENT_SITE_NAME || '',
     mode: (process.env.PAYMENT_GATEWAY_MODE || 'page').toLowerCase(),
   };
 }
@@ -67,7 +67,7 @@ function getPlanAmount(currentPlan: string, targetPlan: 'BASIC' | 'ADVANCED') {
   if (currentPlan === 'BASIC' && targetPlan === 'ADVANCED') {
     return {
       orderType: 'UPGRADE' as const,
-      amount: 80000,
+      amount: 5000,
     };
   }
 
@@ -94,7 +94,7 @@ function buildGatewayPaymentFields(params: {
     return_url: params.returnUrl,
     name: `noif ${PLAN_LABELS[params.plan]}`,
     money: (params.amount / 100).toFixed(2),
-    sitename: merchant.siteName,
+    ...(merchant.siteName ? { sitename: merchant.siteName } : {}),
   };
   const sign = signGatewayPayload(payload, merchant.key);
 
@@ -147,7 +147,7 @@ async function activatePaidOrder(orderId: string, paymentId?: string) {
     }),
   ]);
 
-  const planName = plan === 'BASIC' ? '基础套餐 (¥199)' : '进阶套餐 (¥999)';
+  const planName = plan === 'BASIC' ? '基础套餐 (¥49.99)' : '进阶套餐 (¥99.99)';
   const amount = (updatedOrder.amount / 100).toFixed(2);
   await sendPaymentSuccess(updatedOrder.subscription.user.email, planName, amount);
 
@@ -243,7 +243,7 @@ router.get('/plans', async (_req, res) => {
     {
       id: 'BASIC',
       name: '基础套餐',
-      price: 199,
+      price: 49.99,
       originalPrice: null,
       features: [
         '个性化学习模块',
@@ -259,7 +259,7 @@ router.get('/plans', async (_req, res) => {
     {
       id: 'ADVANCED',
       name: '进阶套餐',
-      price: 999,
+      price: 99.99,
       originalPrice: null,
       features: [
         '基础套餐全部权益',
@@ -493,7 +493,7 @@ router.post('/upgrade', authenticate, async (req: AuthRequest, res: Response) =>
     data: {
       orderNo,
       subscriptionId: subscription.id,
-      amount: hasFreeCoupon ? 0 : 80000, // ¥800 or ¥0
+      amount: hasFreeCoupon ? 0 : 5000, // ¥50.00 or ¥0
       plan: 'ADVANCED',
       orderType: 'UPGRADE',
       paymentMethod: paymentMethod || 'WECHAT',
@@ -519,7 +519,7 @@ router.post('/upgrade', authenticate, async (req: AuthRequest, res: Response) =>
         req,
         orderId: order.id,
         orderNo,
-        amount: 80000,
+        amount: 5000,
         plan: 'ADVANCED',
         paymentMethod: (paymentMethod || 'WECHAT') as 'ALIPAY' | 'WECHAT',
       })

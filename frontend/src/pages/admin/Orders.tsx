@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { adminApi } from '../../api/client';
 import dayjs from 'dayjs';
 
-const PLAN_LABELS: Record<string, string> = { FREE: '免费', BASIC: '基础¥199', ADVANCED: '进阶¥999' };
+const PLAN_LABELS: Record<string, string> = { FREE: '免费', BASIC: '基础¥49.99', ADVANCED: '进阶¥99.99' };
 const ORDER_TYPE_LABELS: Record<string, string> = { NEW: '新购', UPGRADE: '升级补差价' };
 const STATUS_COLORS: Record<string, string> = {
   PAID: 'bg-green-50 text-green-700',

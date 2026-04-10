@@ -26,8 +26,8 @@ export interface PaginatedResult<T> {
 
 export const PLAN_PRICES: Record<SubscriptionPlan, number> = {
   FREE: 0,
-  BASIC: 19900,    // ¥199 in cents
-  ADVANCED: 99900, // ¥999 in cents
+  BASIC: 4999,     // ¥49.99 in cents
+  ADVANCED: 9999,  // ¥99.99 in cents
 };
 
 export const FREE_COUPON_CODE = 'ZY85CJ';

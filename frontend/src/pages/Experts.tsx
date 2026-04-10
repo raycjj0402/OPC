@@ -40,7 +40,7 @@ export default function ExpertsPage() {
             <Lock size={20} className="text-gray-400" />
             <div>
               <p className="font-medium text-gray-700">专家咨询为进阶套餐专属功能</p>
-              <p className="text-sm text-gray-500">升级至 ¥999 进阶套餐，获得2次1对1咨询机会</p>
+              <p className="text-sm text-gray-500">升级至 ¥99.99 进阶套餐，获得2次1对1咨询机会</p>
             </div>
           </div>
           <button

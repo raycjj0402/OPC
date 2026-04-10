@@ -284,7 +284,7 @@ export const interactionModes = [
   {
     label: '文字问诊',
     value: 'TEXT',
-    hint: 'MVP 推荐。适合沉淀结构化信息和后续生成报告。',
+    hint: '适合沉淀结构化信息，并在对话后生成风险报告。',
   },
   {
     label: '语音问诊（即将上线）',
@@ -418,7 +418,7 @@ export const pricingPlans = [
   {
     id: 'ADVANCED',
     label: '创业 / 实体店版',
-    price: '49.99',
+    price: '99.99',
     originalPrice: '199.99',
     description: '适合开店、创业开公司、注册主体或高风险决策场景。',
     features: [

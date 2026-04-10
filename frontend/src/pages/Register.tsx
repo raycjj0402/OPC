@@ -28,7 +28,7 @@ export default function Register() {
       if (isDemoMode) {
         const demoUser = buildDemoUser(email, null, user);
         setAuth(buildDemoToken(email), demoUser);
-        toast.success('演示账号已创建');
+        toast.success('账号已创建');
         navigate('/payment');
         return;
       }
@@ -69,7 +69,7 @@ export default function Register() {
             <p className="mt-3 text-base leading-8 text-slate-400">用一个账号保存你的问诊、案例浏览和历史报告。</p>
             {isDemoMode ? (
               <div className="mt-5 inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/8 px-4 py-2 text-xs tracking-[0.14em] text-cyan-100">
-                演示模式：填写邮箱和密码即可继续
+                当前本地环境可直接继续，便于你验证完整流程
               </div>
             ) : null}
           </div>
